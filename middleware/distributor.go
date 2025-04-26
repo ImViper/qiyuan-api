@@ -227,6 +227,12 @@ func getModelRequest(c *gin.Context) (*ModelRequest, bool, error) {
 		}
 		c.Set("relay_mode", relayMode)
 	}
+	if strings.HasPrefix(c.Request.URL.Path, "/v1/file") {
+		if modelRequest.Model == "" {
+			modelRequest.Model = "gemini-2.0-flash"
+		}
+		shouldSelectChannel = true
+	}
 	return &modelRequest, shouldSelectChannel, nil
 }
 

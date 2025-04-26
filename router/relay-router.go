@@ -63,8 +63,10 @@ func SetRelayRouter(router *gin.Engine) {
 		httpRouter.DELETE("/models/:model", controller.RelayNotImplemented)
 		httpRouter.POST("/moderations", controller.Relay)
 		httpRouter.POST("/rerank", controller.Relay)
+		httpRouter.POST("/file", controller.UploadFile)
+		httpRouter.POST("/files/batch-upload", controller.BatchUploadFile)
+		httpRouter.POST("/files/batch-status", controller.BatchGetFileStatus)
 	}
-
 	relayMjRouter := router.Group("/mj")
 	registerMjRouterGroup(relayMjRouter)
 

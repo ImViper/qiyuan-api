@@ -180,6 +180,9 @@ func (a *Adaptor) DoResponse(c *gin.Context, resp *http.Response, info *relaycom
 	if strings.HasPrefix(info.UpstreamModelName, "imagen") {
 		return GeminiImageHandler(c, resp, info)
 	}
+	if strings.Contains(info.UpstreamModelName, "image") {
+		return GeminiImageGenerationHandler(c, resp, info)
+	}
 
 	// check if the model is an embedding model
 	if strings.HasPrefix(info.UpstreamModelName, "text-embedding") ||

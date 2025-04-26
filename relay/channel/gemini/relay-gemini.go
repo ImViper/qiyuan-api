@@ -306,28 +306,40 @@ func CovertGemini2OpenAI(textRequest dto.GeneralOpenAIRequest, info *relaycommon
 				if constant.GeminiVisionMaxImageNum != -1 && imageNum > constant.GeminiVisionMaxImageNum {
 					return nil, fmt.Errorf("too many images in the message, max allowed is %d", constant.GeminiVisionMaxImageNum)
 				}
+
+				url := part.GetImageMedia().Url
 				// 判断是否是url
 				if strings.HasPrefix(part.GetImageMedia().Url, "http") {
-					// 是url，获取文件的类型和base64编码的数据
-					fileData, err := service.GetFileBase64FromUrl(part.GetImageMedia().Url)
-					if err != nil {
-						return nil, fmt.Errorf("get file base64 from url '%s' failed: %w", part.GetImageMedia().Url, err)
-					}
+					// 检查是否是 Gemini API 的文件 URL
+					if strings.Contains(url, "generativelanguage.googleapis.com/v1beta/files/") {
+						// 对于 Gemini API 的文件 URL，直接使用，不尝试下载
+						parts = append(parts, GeminiPart{
+							FileData: &GeminiFileData{
+								FileUri: url,
+							},
+						})
+					}else {
+						// 是url，获取文件的类型和base64编码的数据
+						fileData, err := service.GetFileBase64FromUrl(part.GetImageMedia().Url)
+						if err != nil {
+							return nil, fmt.Errorf("get file base64 from url '%s' failed: %w", part.GetImageMedia().Url, err)
+						}
 
-					// 校验 MimeType 是否在 Gemini 支持的白名单中
-					if _, ok := geminiSupportedMimeTypes[strings.ToLower(fileData.MimeType)]; !ok {
-						url := part.GetImageMedia().Url
-						return nil, fmt.Errorf("mime type is not supported by Gemini: '%s', url: '%s', supported types are: %v", fileData.MimeType, url, getSupportedMimeTypesList())
-					}
+						// 校验 MimeType 是否在 Gemini 支持的白名单中
+						if _, ok := geminiSupportedMimeTypes[strings.ToLower(fileData.MimeType)]; !ok {
+							url := part.GetImageMedia().Url
+							return nil, fmt.Errorf("mime type is not supported by Gemini: '%s', url: '%s', supported types are: %v", fileData.MimeType, url, getSupportedMimeTypesList())
+						}
 
-					parts = append(parts, GeminiPart{
-						InlineData: &GeminiInlineData{
-							MimeType: fileData.MimeType, // 使用原始的 MimeType，因为大小写可能对API有意义
-							Data:     fileData.Base64Data,
-						},
-					})
+						parts = append(parts, GeminiPart{
+							InlineData: &GeminiInlineData{
+								MimeType: fileData.MimeType, // 使用原始的 MimeType，因为大小写可能对API有意义
+								Data:     fileData.Base64Data,
+							},
+						})
+					}
 				} else {
-					format, base64String, err := service.DecodeBase64FileData(part.GetImageMedia().Url)
+					format, base64String, err := service.DecodeBase64FileData(url)
 					if err != nil {
 						return nil, fmt.Errorf("decode base64 image data failed: %s", err.Error())
 					}
@@ -677,9 +689,9 @@ func responseGeminiChat2OpenAI(c *gin.Context, response *GeminiChatResponse) *dt
 					choice.Message.ReasoningContent = part.Text
 				} else {
 					if part.ExecutableCode != nil {
-						texts = append(texts, "```"+part.ExecutableCode.Language+"\n"+part.ExecutableCode.Code+"\n```")
+						texts = append(texts, "```"+part.ExecutableCode.Language+"\n"+part.ExecutableCode.Code+"\n```\n")
 					} else if part.CodeExecutionResult != nil {
-						texts = append(texts, "```output\n"+part.CodeExecutionResult.Output+"\n```")
+						texts = append(texts, "```output\n"+part.CodeExecutionResult.Output+"\n```\n")
 					} else {
 						// 过滤掉空行
 						if part.Text != "\n" {

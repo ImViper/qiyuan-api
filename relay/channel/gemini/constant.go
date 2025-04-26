@@ -16,6 +16,10 @@ var ModelList = []string{
 	"gemini-2.0-pro-exp",
 	// thinking exp
 	"gemini-2.0-flash-thinking-exp",
+	"gemini-2.5-flash-preview-04-17",
+	"gemini-2.5-flash-preview-05-20",
+	"gemini-2.5-flash-preview-05-20-thinking",
+	"gemini-2.5-flash",
 	"gemini-2.5-pro-exp-03-25",
 	"gemini-2.5-pro-preview-03-25",
 	// imagen models
