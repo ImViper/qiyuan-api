@@ -177,6 +177,7 @@ func UploadFile(c *gin.Context) {
 
 	c.JSON(http.StatusOK, gin.H{
 		"uri": uri,
+		"channel_id": channel.Id, // 添加渠道ID到返回值中
 	})
 }
 
