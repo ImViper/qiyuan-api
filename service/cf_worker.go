@@ -43,6 +43,21 @@ func DoWorkerRequest(req *WorkerRequest) (*http.Response, error) {
 }
 
 func DoDownloadRequest(originUrl string) (resp *http.Response, err error) {
+	// 检查是否是 Gemini API 文件 URL
+	if strings.Contains(originUrl, "generativelanguage.googleapis.com/v1beta/files/") {
+		common.SysLog(fmt.Sprintf("skipping download for Gemini API file URL: %s", originUrl))
+		// 创建一个模拟的响应，包含必要的信息
+		// 这样调用方就不会收到错误，但也不会尝试下载文件
+		dummyResp := &http.Response{
+			StatusCode: http.StatusOK,
+			Body:       http.NoBody,
+			Header:     make(http.Header),
+		}
+		// 设置一个通用的 Content-Type
+		dummyResp.Header.Set("Content-Type", "application/octet-stream")
+		return dummyResp, nil
+	}
+
 	if setting.EnableWorker() {
 		common.SysLog(fmt.Sprintf("downloading file from worker: %s", originUrl))
 		req := &WorkerRequest{

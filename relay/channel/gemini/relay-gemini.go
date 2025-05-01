@@ -206,21 +206,41 @@ func CovertGemini2OpenAI(textRequest dto.GeneralOpenAIRequest, info *relaycommon
 				if constant.GeminiVisionMaxImageNum != -1 && imageNum > constant.GeminiVisionMaxImageNum {
 					return nil, fmt.Errorf("too many images in the message, max allowed is %d", constant.GeminiVisionMaxImageNum)
 				}
+
+				url := part.GetImageMedia().Url
 				// 判断是否是url
-				if strings.HasPrefix(part.GetImageMedia().Url, "http") {
-					//是url，获取图片的类型和base64编码的数据
-					fileData, err := service.GetFileBase64FromUrl(part.GetImageMedia().Url)
-					if err != nil {
-						return nil, fmt.Errorf("get file base64 from url failed: %s", err.Error())
+				if strings.HasPrefix(url, "http") {
+					// 检查是否是 Gemini API 的文件 URL
+					if strings.Contains(url, "generativelanguage.googleapis.com/v1beta/files/") {
+						// 对于 Gemini API 的文件 URL，直接使用，不尝试下载
+						parts = append(parts, GeminiPart{
+							FileData: &GeminiFileData{
+								FileUri: url,
+							},
+						})
+					} else {
+						// 直接使用 URL，不再下载和转 base64
+						parts = append(parts, GeminiPart{
+							FileData: &GeminiFileData{
+								FileUri: url,
+							},
+						})
+						// 以下是原来的下载和转 base64 的代码，现在注释掉
+						/*
+							fileData, err := service.GetFileBase64FromUrl(url)
+							if err != nil {
+								return nil, fmt.Errorf("get file base64 from url failed: %s", err.Error())
+							}
+							parts = append(parts, GeminiPart{
+								InlineData: &GeminiInlineData{
+									MimeType: fileData.MimeType,
+									Data:     fileData.Base64Data,
+								},
+							})
+						*/
 					}
-					parts = append(parts, GeminiPart{
-						InlineData: &GeminiInlineData{
-							MimeType: fileData.MimeType,
-							Data:     fileData.Base64Data,
-						},
-					})
 				} else {
-					format, base64String, err := service.DecodeBase64FileData(part.GetImageMedia().Url)
+					format, base64String, err := service.DecodeBase64FileData(url)
 					if err != nil {
 						return nil, fmt.Errorf("decode base64 image data failed: %s", err.Error())
 					}
@@ -540,9 +560,9 @@ func responseGeminiChat2OpenAI(response *GeminiChatResponse) *dto.OpenAITextResp
 					}
 				} else {
 					if part.ExecutableCode != nil {
-						texts = append(texts, "```"+part.ExecutableCode.Language+"\n"+part.ExecutableCode.Code+"\n```")
+						texts = append(texts, "```"+part.ExecutableCode.Language+"\n"+part.ExecutableCode.Code+"\n```\n")
 					} else if part.CodeExecutionResult != nil {
-						texts = append(texts, "```output\n"+part.CodeExecutionResult.Output+"\n```")
+						texts = append(texts, "```output\n"+part.CodeExecutionResult.Output+"\n```\n")
 					} else {
 						// 过滤掉空行
 						if part.Text != "\n" {

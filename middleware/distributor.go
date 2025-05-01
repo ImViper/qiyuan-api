@@ -204,9 +204,9 @@ func getModelRequest(c *gin.Context) (*ModelRequest, bool, error) {
 	}
 	if strings.HasPrefix(c.Request.URL.Path, "/v1/file") {
 		if modelRequest.Model == "" {
-			modelRequest.Model = c.Param("model")
+			modelRequest.Model = "gemini-2.0-flash"
 		}
-		shouldSelectChannel = false
+		shouldSelectChannel = true
 	}
 	return &modelRequest, shouldSelectChannel, nil
 }
