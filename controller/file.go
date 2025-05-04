@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 
 	"github.com/gin-gonic/gin"
@@ -17,6 +18,11 @@ import (
 // Request body structure for local file upload
 type UploadLocalFileRequest struct {
 	LocalPath string `json:"local_path"`
+}
+
+// BatchFileStatusRequest 批量查询文件状态的请求结构
+type BatchFileStatusRequest struct {
+	FileNames []string `json:"file_names"` // 文件名称列表，例如 ["files/id1", "files/id2"]
 }
 
 // UploadFile handles file uploads from a local server path for Gemini.
@@ -157,7 +163,7 @@ func UploadFile(c *gin.Context) {
 	}
 
 	// 调用 Gemini 文件上传辅助函数
-	uri, err := gemini.UploadFileReaderToGemini(
+	file, err := gemini.UploadFileReaderToGemini(
 		c.Request.Context(),
 		apiKey,    // Pass the fetched API Key
 		proxyURL,  // Pass the fetched proxy URL (can be empty)
@@ -176,20 +182,131 @@ func UploadFile(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{
-		"uri": uri,
+		"uri": file.URI,
+		"file": gin.H{
+			"name":            file.Name,
+			"display_name":    file.DisplayName,
+			"mime_type":       file.MIMEType,
+			"size_bytes":      file.SizeBytes,
+			"create_time":     file.CreateTime,
+			"update_time":     file.UpdateTime,
+			"expiration_time": file.ExpirationTime,
+			"sha256_hash":     file.Sha256Hash,
+			"uri":             file.URI,
+			"state":           file.State,
+		},
 		"channel_id": channel.Id, // 添加渠道ID到返回值中
 	})
+}
+
+// BatchGetFileStatus 处理批量查询文件状态的请求
+// 接收一个文件名称列表，返回每个文件的状态信息
+func BatchGetFileStatus(c *gin.Context) {
+	var request BatchFileStatusRequest
+	if err := c.ShouldBindJSON(&request); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error": gin.H{
+				"message": fmt.Sprintf("无效的请求体: %v", err),
+				"type":    "invalid_request_error",
+			},
+		})
+		return
+	}
+
+	if len(request.FileNames) == 0 {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error": gin.H{
+				"message": "请求体缺少有效的 'file_names' 字段或为空数组",
+				"type":    "invalid_request_error",
+			},
+		})
+		return
+	}
+
+	// 获取用户信息
+	userId := c.GetInt("id")
+	user, err := model.GetUserCache(userId)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"error": gin.H{
+				"message": fmt.Sprintf("获取用户信息失败: %v", err),
+				"type":    "api_error",
+			},
+		})
+		return
+	}
+
+	// 获取 Gemini 渠道
+	channel, err := getGeminiChannel(c, user.Group, "gemini-2.0-flash", 0)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"error": gin.H{
+				"message": fmt.Sprintf("无法获取有效的 Gemini 渠道: %v", err),
+				"type":    "api_error",
+			},
+		})
+		return
+	}
+
+	// 从 channel 获取 API Key
+	apiKey := channel.Key
+
+	// 使用 relaycommon.GenRelayInfo 获取 RelayInfo 对象
+	relayInfo := common.GenRelayInfo(c)
+
+	// 从 RelayInfo 中提取代理 URL
+	proxyURL := ""
+	if proxySetting, ok := relayInfo.ChannelSetting["proxy"]; ok {
+		if proxyStr, isString := proxySetting.(string); isString {
+			proxyURL = proxyStr
+			log.Printf("批量查询文件状态: 使用代理 URL: %s", proxyURL)
+		} else {
+			log.Printf("批量查询文件状态: Warning: Proxy setting in RelayInfo.ChannelSetting is not a string: %T", proxySetting)
+		}
+	}
+
+	// 调用 Gemini 批量查询文件状态函数
+	results, err := gemini.BatchGetFileStatus(
+		c.Request.Context(),
+		apiKey,            // 传递获取的 API Key
+		proxyURL,          // 传递获取的代理 URL (可以为空)
+		request.FileNames, // 文件名称列表
+	)
+
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"error": gin.H{
+				"message": fmt.Sprintf("批量查询文件状态失败: %v", err),
+				"type":    "api_error",
+			},
+		})
+		return
+	}
+
+	// 构造响应
+	response := gemini.BatchFileStatusResponse{
+		Results: results,
+	}
+
+	c.JSON(http.StatusOK, response)
 }
 
 // getGeminiChannel 复用 relay.go 中的 getChannel 函数逻辑，但使用不同的函数名避免冲突
 func getGeminiChannel(c *gin.Context, group, originalModel string, retryCount int) (*model.Channel, error) {
 	// 如果指定了特定的渠道 ID，则直接使用该渠道
-	if specificChannelId, ok := c.Get("specific_channel_id"); ok {
-		channelId := specificChannelId.(int)
-		c.Set("channel_id", channelId)
-		channel, err := model.GetChannelById(channelId, true)
+	if v, exists := c.Get("specific_channel_id"); exists {
+		idStr, ok := v.(string)
+		if !ok {
+			return nil, fmt.Errorf("specific_channel_id 不是字符串类型")
+		}
+		id, err := strconv.ParseInt(idStr, 10, 64)
 		if err != nil {
-			return nil, fmt.Errorf("无法获取指定的渠道: %w", err)
+			return nil, fmt.Errorf("渠道ID格式错误: %w", err)
+		}
+		c.Set("channel_id", id)
+		channel, err := model.GetChannelById(int(id), true)
+		if err != nil {
+			return nil, fmt.Errorf("无法获取指定渠道: %w", err)
 		}
 		return channel, nil
 	}

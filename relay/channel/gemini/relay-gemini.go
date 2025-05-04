@@ -210,7 +210,7 @@ func CovertGemini2OpenAI(textRequest dto.GeneralOpenAIRequest, info *relaycommon
 				url := part.GetImageMedia().Url
 				// 判断是否是url
 				if strings.HasPrefix(url, "http") {
-					// 检查是否是 Gemini API 的文件 URL
+					// 检查是否是 Gemini API 的文件 URL,是的话先魔改为文件
 					if strings.Contains(url, "generativelanguage.googleapis.com/v1beta/files/") {
 						// 对于 Gemini API 的文件 URL，直接使用，不尝试下载
 						parts = append(parts, GeminiPart{
@@ -219,25 +219,17 @@ func CovertGemini2OpenAI(textRequest dto.GeneralOpenAIRequest, info *relaycommon
 							},
 						})
 					} else {
-						// 直接使用 URL，不再下载和转 base64
+						// 以下是原来的下载和转 base64 的代码，现在注释掉
+						fileData, err := service.GetFileBase64FromUrl(url)
+						if err != nil {
+							return nil, fmt.Errorf("get file base64 from url failed: %s", err.Error())
+						}
 						parts = append(parts, GeminiPart{
-							FileData: &GeminiFileData{
-								FileUri: url,
+							InlineData: &GeminiInlineData{
+								MimeType: fileData.MimeType,
+								Data:     fileData.Base64Data,
 							},
 						})
-						// 以下是原来的下载和转 base64 的代码，现在注释掉
-						/*
-							fileData, err := service.GetFileBase64FromUrl(url)
-							if err != nil {
-								return nil, fmt.Errorf("get file base64 from url failed: %s", err.Error())
-							}
-							parts = append(parts, GeminiPart{
-								InlineData: &GeminiInlineData{
-									MimeType: fileData.MimeType,
-									Data:     fileData.Base64Data,
-								},
-							})
-						*/
 					}
 				} else {
 					format, base64String, err := service.DecodeBase64FileData(url)
