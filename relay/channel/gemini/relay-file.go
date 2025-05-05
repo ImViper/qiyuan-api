@@ -38,11 +38,6 @@ type GeminiErrorResponse struct {
 	} `json:"error"`
 }
 
-// BatchFileStatusRequest 定义了批量查询文件状态的请求体
-type BatchFileStatusRequest struct {
-	FileIDs []string `json:"file_ids"` // 文件 ID 列表，例如 ["files/id1", "files/id2"]
-}
-
 // FileStatusResult 定义了单个文件的查询结果，包含文件信息或错误
 type FileStatusResult struct {
 	File  *genai.File `json:"file,omitempty"`  // 成功时返回的文件信息
