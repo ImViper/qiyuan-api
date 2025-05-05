@@ -8,8 +8,10 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"sync"
 
 	"github.com/gin-gonic/gin"
+	"google.golang.org/genai"
 	"one-api/model"
 	"one-api/relay/channel/gemini"
 	"one-api/relay/common"
@@ -23,6 +25,11 @@ type UploadLocalFileRequest struct {
 // BatchFileStatusRequest 批量查询文件状态的请求结构
 type BatchFileStatusRequest struct {
 	FileNames []string `json:"file_names"` // 文件名称列表，例如 ["files/id1", "files/id2"]
+}
+
+// BatchUploadFileRequest 批量上传文件的请求结构
+type BatchUploadFileRequest struct {
+	LocalPaths []string `json:"local_paths"` // 本地文件路径列表
 }
 
 // UploadFile handles file uploads from a local server path for Gemini.
@@ -289,6 +296,233 @@ func BatchGetFileStatus(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, response)
+}
+
+// BatchUploadFile 处理批量上传本地文件到 Gemini 的请求
+// 所有文件使用相同的渠道进行上传，支持可配置的并发上传
+func BatchUploadFile(c *gin.Context) {
+	var request BatchUploadFileRequest
+	if err := c.ShouldBindJSON(&request); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error": gin.H{
+				"message": fmt.Sprintf("无效的请求体: %v", err),
+				"type":    "invalid_request_error",
+			},
+		})
+		return
+	}
+
+	if len(request.LocalPaths) == 0 {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error": gin.H{
+				"message": "请求体缺少有效的 'local_paths' 字段或为空数组",
+				"type":    "invalid_request_error",
+			},
+		})
+		return
+	}
+
+	// 设置固定的模型名称
+	modelName := "gemini-2.0-flash"
+
+	// 设置固定的并发数
+	concurrency := 5
+
+	// --- 安全检查：限制允许的目录 ---
+	// TODO: 考虑从配置或环境变量加载此路径
+	allowedBaseDir := `H:\Code\jd_vedio` // 注意 Windows 路径的反斜杠
+	cleanAllowedBaseDir := filepath.Clean(allowedBaseDir)
+
+	// 预先验证所有路径
+	cleanPaths := make([]string, 0, len(request.LocalPaths))
+	for _, path := range request.LocalPaths {
+		if path == "" {
+			continue // 跳过空路径
+		}
+
+		// 获取并清理请求的路径
+		absRequestPath, err := filepath.Abs(path)
+		if err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{
+				"error": gin.H{
+					"message": fmt.Sprintf("无效的文件路径 '%s': %v", path, err),
+					"type":    "invalid_request_error",
+				},
+			})
+			return
+		}
+		cleanPath := filepath.Clean(absRequestPath)
+
+		// 检查清理后的路径是否在允许的目录下
+		if !strings.HasPrefix(cleanPath, cleanAllowedBaseDir+string(filepath.Separator)) && cleanPath != cleanAllowedBaseDir {
+			c.JSON(http.StatusForbidden, gin.H{
+				"error": gin.H{
+					"message": fmt.Sprintf("禁止访问路径: %s", path), // 不暴露清理后的路径
+					"type":    "invalid_request_error",
+				},
+			})
+			return
+		}
+
+		cleanPaths = append(cleanPaths, cleanPath)
+	}
+	// --- 安全检查结束 ---
+
+	// 获取用户信息
+	userId := c.GetInt("id")
+	user, err := model.GetUserCache(userId)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"error": gin.H{
+				"message": fmt.Sprintf("获取用户信息失败: %v", err),
+				"type":    "api_error",
+			},
+		})
+		return
+	}
+
+	// 获取 Gemini 渠道（所有文件共用同一个渠道）
+	channel, err := getGeminiChannel(c, user.Group, modelName, 0)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"error": gin.H{
+				"message": fmt.Sprintf("无法获取有效的 Gemini 渠道: %v", err),
+				"type":    "api_error",
+			},
+		})
+		return
+	}
+
+	// 从 channel 获取 API Key
+	apiKey := channel.Key
+
+	// 使用 relaycommon.GenRelayInfo 获取 RelayInfo 对象
+	relayInfo := common.GenRelayInfo(c)
+
+	// 从 RelayInfo 中提取代理 URL
+	proxyURL := ""
+	if proxySetting, ok := relayInfo.ChannelSetting["proxy"]; ok {
+		if proxyStr, isString := proxySetting.(string); isString {
+			proxyURL = proxyStr
+			log.Printf("批量上传文件: 使用代理 URL: %s", proxyURL)
+		} else {
+			log.Printf("批量上传文件: Warning: Proxy setting in RelayInfo.ChannelSetting is not a string: %T", proxySetting)
+		}
+	}
+
+	// 创建上传结果结构
+	type UploadResult struct {
+		OriginalPath string      `json:"original_path"`
+		Success      bool        `json:"success"`
+		File         *genai.File `json:"file,omitempty"`
+		Error        string      `json:"error,omitempty"`
+	}
+
+	results := make([]UploadResult, len(cleanPaths))
+	resultMap := make(map[string]int) // 映射原始路径到结果数组索引
+
+	// 初始化结果映射
+	for i, path := range request.LocalPaths {
+		if i < len(cleanPaths) {
+			resultMap[path] = i
+			results[i] = UploadResult{
+				OriginalPath: path,
+				Success:      false,
+			}
+		}
+	}
+
+	// 创建并发控制
+	var wg sync.WaitGroup
+	sem := make(chan struct{}, concurrency)
+	var mu sync.Mutex // 保护结果数组的并发访问
+
+	// 并发上传文件
+	for i, cleanPath := range cleanPaths {
+		originalPath := request.LocalPaths[i]
+		wg.Add(1)
+		sem <- struct{}{} // 获取信号量
+
+		go func(index int, cPath, origPath string) {
+			defer wg.Done()
+			defer func() { <-sem }() // 释放信号量
+
+			log.Printf("批量上传: 开始处理文件 %s", origPath)
+
+			// 打开本地文件
+			localFile, err := os.Open(cPath)
+			if err != nil {
+				errorMsg := fmt.Sprintf("无法打开本地文件: %v", err)
+				if os.IsNotExist(err) {
+					errorMsg = "文件未找到"
+				} else if os.IsPermission(err) {
+					errorMsg = "无权访问文件"
+				}
+
+				mu.Lock()
+				results[index] = UploadResult{
+					OriginalPath: origPath,
+					Success:      false,
+					Error:        errorMsg,
+				}
+				mu.Unlock()
+				return
+			}
+			defer localFile.Close()
+
+			// 获取文件信息
+			fileInfo, err := localFile.Stat()
+			if err != nil {
+				mu.Lock()
+				results[index] = UploadResult{
+					OriginalPath: origPath,
+					Success:      false,
+					Error:        fmt.Sprintf("无法获取文件信息: %v", err),
+				}
+				mu.Unlock()
+				return
+			}
+			filename := fileInfo.Name()
+
+			// 调用 Gemini 文件上传函数
+			file, err := gemini.UploadFileReaderToGemini(
+				c.Request.Context(),
+				apiKey,    // 传递获取的 API Key
+				proxyURL,  // 传递获取的代理 URL
+				localFile, // 文件读取器
+				filename,  // 文件名
+			)
+
+			if err != nil {
+				mu.Lock()
+				results[index] = UploadResult{
+					OriginalPath: origPath,
+					Success:      false,
+					Error:        fmt.Sprintf("上传文件到 Gemini 失败: %v", err),
+				}
+				mu.Unlock()
+				return
+			}
+
+			mu.Lock()
+			results[index] = UploadResult{
+				OriginalPath: origPath,
+				Success:      true,
+				File:         file,
+			}
+			mu.Unlock()
+
+			log.Printf("批量上传: 文件 %s 上传成功, URI: %s", origPath, file.URI)
+		}(i, cleanPath, originalPath)
+	}
+
+	wg.Wait() // 等待所有上传完成
+
+	// 构造最终响应
+	c.JSON(http.StatusOK, gin.H{
+		"channel_id": channel.Id,
+		"results":    results,
+	})
 }
 
 // getGeminiChannel 复用 relay.go 中的 getChannel 函数逻辑，但使用不同的函数名避免冲突
