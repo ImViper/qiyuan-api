@@ -27,7 +27,7 @@ var defaultGeminiSettings = GeminiSettings{
 		"gemini-2.0-flash-exp-image-generation",
 		"gemini-2.0-flash-exp",
 	},
-	ThinkingAdapterEnabled:                false,
+	ThinkingAdapterEnabled:                true,
 	ThinkingAdapterBudgetTokensPercentage: 0.6,
 }
 
