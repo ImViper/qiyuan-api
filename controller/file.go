@@ -326,7 +326,7 @@ func BatchUploadFile(c *gin.Context) {
 	modelName := "gemini-2.0-flash"
 
 	// 设置固定的并发数
-	concurrency := 5
+	concurrency := 10
 
 	// --- 安全检查：限制允许的目录 ---
 	// TODO: 考虑从配置或环境变量加载此路径
