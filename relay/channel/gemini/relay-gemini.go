@@ -208,7 +208,7 @@ func CovertGemini2OpenAI(textRequest dto.GeneralOpenAIRequest, info *relaycommon
 				}
 				// 判断是否是url
 				if strings.HasPrefix(part.GetImageMedia().Url, "http") {
-					// 是url，获取图片的类型和base64编码的数据
+					//是url，获取图片的类型和base64编码的数据
 					fileData, err := service.GetFileBase64FromUrl(part.GetImageMedia().Url)
 					if err != nil {
 						return nil, fmt.Errorf("get file base64 from url failed: %s", err.Error())
