@@ -551,6 +551,8 @@ func responseGeminiChat2OpenAI(response *GeminiChatResponse) *dto.OpenAITextResp
 					if call := getResponseToolCall(&part); call != nil {
 						toolCalls = append(toolCalls, *call)
 					}
+				} else if part.Thought {
+					choice.Message.ReasoningContent = part.Text
 				} else {
 					if part.ExecutableCode != nil {
 						texts = append(texts, "```"+part.ExecutableCode.Language+"\n"+part.ExecutableCode.Code+"\n```\n")
@@ -568,7 +570,6 @@ func responseGeminiChat2OpenAI(response *GeminiChatResponse) *dto.OpenAITextResp
 				choice.Message.SetToolCalls(toolCalls)
 				isToolCall = true
 			}
-
 			choice.Message.SetStringContent(strings.Join(texts, "\n"))
 
 		}
@@ -608,6 +609,7 @@ func streamResponseGeminiChat2OpenAI(geminiResponse *GeminiChatResponse) (*dto.C
 		}
 		var texts []string
 		isTools := false
+		isThought := false
 		if candidate.FinishReason != nil {
 			// p := GeminiConvertFinishReason(*candidate.FinishReason)
 			switch *candidate.FinishReason {
@@ -632,6 +634,9 @@ func streamResponseGeminiChat2OpenAI(geminiResponse *GeminiChatResponse) (*dto.C
 					call.SetIndex(len(choice.Delta.ToolCalls))
 					choice.Delta.ToolCalls = append(choice.Delta.ToolCalls, *call)
 				}
+			} else if part.Thought {
+				isThought = true
+				texts = append(texts, part.Text)
 			} else {
 				if part.ExecutableCode != nil {
 					texts = append(texts, "```"+part.ExecutableCode.Language+"\n"+part.ExecutableCode.Code+"\n```\n")
@@ -644,7 +649,11 @@ func streamResponseGeminiChat2OpenAI(geminiResponse *GeminiChatResponse) (*dto.C
 				}
 			}
 		}
-		choice.Delta.SetContentString(strings.Join(texts, "\n"))
+		if isThought {
+			choice.Delta.SetReasoningContent(strings.Join(texts, "\n"))
+		} else {
+			choice.Delta.SetContentString(strings.Join(texts, "\n"))
+		}
 		if isTools {
 			choice.FinishReason = &constant.FinishReasonToolCalls
 		}
@@ -728,8 +737,11 @@ func GeminiChatHandler(c *gin.Context, resp *http.Response, info *relaycommon.Re
 	if err != nil {
 		return service.OpenAIErrorWrapper(err, "close_response_body_failed", http.StatusInternalServerError), nil
 	}
+	if common.DebugEnabled {
+		println(string(responseBody))
+	}
 	var geminiResponse GeminiChatResponse
-	err = json.Unmarshal(responseBody, &geminiResponse)
+	err = common.DecodeJson(responseBody, &geminiResponse)
 	if err != nil {
 		return service.OpenAIErrorWrapper(err, "unmarshal_response_body_failed", http.StatusInternalServerError), nil
 	}
