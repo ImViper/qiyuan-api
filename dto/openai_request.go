@@ -2,6 +2,7 @@ package dto
 
 import (
 	"encoding/json"
+	"one-api/common"
 	"strings"
 )
 
@@ -28,7 +29,6 @@ type GeneralOpenAIRequest struct {
 	MaxTokens           uint           `json:"max_tokens,omitempty"`
 	MaxCompletionTokens uint           `json:"max_completion_tokens,omitempty"`
 	ReasoningEffort     string         `json:"reasoning_effort,omitempty"`
-	//Reasoning           json.RawMessage   `json:"reasoning,omitempty"`
 	Temperature      *float64          `json:"temperature,omitempty"`
 	TopP             float64           `json:"top_p,omitempty"`
 	TopK             int               `json:"top_k,omitempty"`
@@ -43,6 +43,7 @@ type GeneralOpenAIRequest struct {
 	ResponseFormat   *ResponseFormat   `json:"response_format,omitempty"`
 	EncodingFormat   any               `json:"encoding_format,omitempty"`
 	Seed             float64           `json:"seed,omitempty"`
+	ParallelTooCalls *bool             `json:"parallel_tool_calls,omitempty"`
 	Tools            []ToolCallRequest `json:"tools,omitempty"`
 	ToolChoice       any               `json:"tool_choice,omitempty"`
 	User             string            `json:"user,omitempty"`
@@ -53,6 +54,16 @@ type GeneralOpenAIRequest struct {
 	Audio            any               `json:"audio,omitempty"`
 	EnableThinking   any               `json:"enable_thinking,omitempty"` // ali
 	ExtraBody        any               `json:"extra_body,omitempty"`
+	WebSearchOptions *WebSearchOptions `json:"web_search_options,omitempty"`
+  // OpenRouter Params
+	Reasoning json.RawMessage `json:"reasoning,omitempty"`
+}
+
+func (r *GeneralOpenAIRequest) ToMap() map[string]any {
+	result := make(map[string]any)
+	data, _ := common.EncodeJson(r)
+	_ = common.DecodeJson(data, &result)
+	return result
 }
 
 type ToolCallRequest struct {
@@ -72,11 +83,11 @@ type StreamOptions struct {
 	IncludeUsage bool `json:"include_usage,omitempty"`
 }
 
-func (r GeneralOpenAIRequest) GetMaxTokens() int {
+func (r *GeneralOpenAIRequest) GetMaxTokens() int {
 	return int(r.MaxTokens)
 }
 
-func (r GeneralOpenAIRequest) ParseInput() []string {
+func (r *GeneralOpenAIRequest) ParseInput() []string {
 	if r.Input == nil {
 		return nil
 	}
@@ -115,6 +126,8 @@ type MediaContent struct {
 	InputAudio any    `json:"input_audio,omitempty"`
 	File       any    `json:"file,omitempty"`
 	VideoUrl   any    `json:"video_url,omitempty"`
+	// OpenRouter Params
+	CacheControl json.RawMessage `json:"cache_control,omitempty"`
 }
 
 func (m *MediaContent) GetImageMedia() *MessageImageUrl {
@@ -369,6 +382,11 @@ func (m *Message) ParseContent() []MediaContent {
 		m.parsedContent = contentList
 	}
 	return contentList
+}
+
+type WebSearchOptions struct {
+	SearchContextSize string          `json:"search_context_size,omitempty"`
+	UserLocation      json.RawMessage `json:"user_location,omitempty"`
 }
 
 type OpenAIResponsesRequest struct {
