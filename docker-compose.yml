@@ -46,8 +46,8 @@ services:
       MYSQL_DATABASE: new-api
     volumes:
       - mysql_data:/var/lib/mysql
-    # ports:
-    #   - "3306:3306"  # If you want to access MySQL from outside Docker, uncomment
+    ports:
+      - "3306:3306"  # Enable external access to MySQL
 
 volumes:
   mysql_data:
