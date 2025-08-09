@@ -14,7 +14,7 @@
 | `docker_helper.py` | Docker Compose渠道管理助手 | `python docker_helper.py check` |
 | `run_export.py` | 快速导出渠道数据 | `python run_export.py -f json` |
 | `test_api_keys.py` | API密钥有效性测试工具（支持Gemini） | `python test_api_keys.py --model gemini-2.5-flash` |
-| `export_api_keys.py` | 导出数据库中的API密钥到文件 | `python export_api_keys.py -o keys.txt` |
+| `export_api_keys.py` | 导出API密钥（支持只导出有效密钥） | `python export_api_keys.py --valid-only` |
 | `batch_test_keys.py` | 批量测试API密钥（默认gemini-2.5-flash） | `python batch_test_keys.py --workers 10` |
 | `clean_database.py` | 数据库智能清理工具（保留结构） | `python clean_database.py --list` |
 | `utils.py` | 通用工具库（被其他脚本引用） | - |
@@ -171,6 +171,18 @@ python export_api_keys.py --format detailed
 
 # 包含禁用的渠道
 python export_api_keys.py --include-disabled
+
+# 只导出有效的API密钥（会先测试每个密钥）
+python export_api_keys.py --valid-only
+
+# 只导出有效密钥到指定文件
+python export_api_keys.py --valid-only -o valid_keys.txt
+
+# 使用更多并发测试有效性
+python export_api_keys.py --valid-only --workers 10
+
+# 指定测试模型
+python export_api_keys.py --valid-only --test-model gemini-2.5-pro
 ```
 
 #### 2. 批量测试API密钥（推荐）
@@ -369,6 +381,18 @@ go mod tidy
 3. **404 Not Found**: 指定的模型不存在
 4. **Timeout**: 网络连接问题或API响应慢
 5. **Connection Error**: 无法连接到Gemini API服务器
+
+## 📝 生成文件说明
+
+脚本生成的以下文件不会被提交到Git（已在.gitignore中配置）：
+
+- `api_keys_*.txt` - 导出的API密钥文件
+- `valid_keys_*.txt` - 导出的有效API密钥文件
+- `*.csv` - CSV格式导出文件
+- `test_results_*.txt` - 测试结果文件
+- `*.sql` - 数据库备份文件
+- `backups/` - 备份目录
+- `__pycache__/` - Python缓存文件
 
 ## 为什么使用Python？
 

@@ -3,13 +3,17 @@
 """
 导出数据库中所有渠道的API密钥
 支持从数据库导出Gemini渠道的API密钥到文件
+支持测试API密钥有效性并只导出有效的密钥
 """
 
 import os
 import sys
 import argparse
-from typing import List, Dict, Optional
+import time
+import requests
+from typing import List, Dict, Optional, Tuple
 from pathlib import Path
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 # 添加当前目录到路径
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -132,6 +136,58 @@ class APIKeyExporter:
             log_error(f"Database query failed: {e}")
             return []
     
+    def test_gemini_key(self, api_key: str, model: str = "gemini-2.5-flash", timeout: int = 10) -> Tuple[bool, str]:
+        """
+        测试Gemini API密钥有效性
+        
+        Args:
+            api_key: API密钥
+            model: 测试模型
+            timeout: 超时时间
+        
+        Returns:
+            (是否有效, 消息)
+        """
+        url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={api_key}"
+        
+        payload = {
+            "contents": [{
+                "parts": [{
+                    "text": "Say 'OK' in one word."
+                }]
+            }],
+            "generationConfig": {
+                "maxOutputTokens": 5,
+                "temperature": 0.1
+            }
+        }
+        
+        headers = {"Content-Type": "application/json"}
+        
+        try:
+            response = requests.post(url, json=payload, headers=headers, timeout=timeout)
+            
+            if response.status_code == 200:
+                data = response.json()
+                if "candidates" in data and len(data["candidates"]) > 0:
+                    return True, "Valid"
+                else:
+                    return False, "Invalid response"
+                    
+            elif response.status_code == 403:
+                return False, "Forbidden"
+            elif response.status_code == 429:
+                return False, "Rate limited"
+            else:
+                return False, f"HTTP {response.status_code}"
+                
+        except requests.exceptions.Timeout:
+            return False, "Timeout"
+        except requests.exceptions.ConnectionError:
+            return False, "Connection error"
+        except Exception as e:
+            return False, f"Error: {str(e)[:30]}"
+    
     def extract_api_keys(self, channels: List[Dict]) -> List[Dict]:
         """
         提取API密钥
@@ -170,6 +226,66 @@ class APIKeyExporter:
                 })
         
         return api_keys_info
+    
+    def filter_valid_keys(self, api_keys_info: List[Dict], max_workers: int = 5, 
+                         model: str = "gemini-2.5-flash") -> List[Dict]:
+        """
+        过滤有效的API密钥
+        
+        Args:
+            api_keys_info: API密钥信息列表
+            max_workers: 最大并发数
+            model: 测试模型
+        
+        Returns:
+            有效的API密钥信息列表
+        """
+        if not api_keys_info:
+            return []
+        
+        log_info(f"Testing {len(api_keys_info)} API keys to filter valid ones...")
+        valid_keys = []
+        tested_keys = set()  # 避免重复测试相同的密钥
+        
+        with ThreadPoolExecutor(max_workers=max_workers) as executor:
+            # 提交测试任务
+            future_to_info = {}
+            for info in api_keys_info:
+                key = info['api_key']
+                if key not in tested_keys:
+                    tested_keys.add(key)
+                    future = executor.submit(self.test_gemini_key, key, model)
+                    future_to_info[future] = info
+                else:
+                    # 如果密钥已测试过，直接跳过
+                    continue
+            
+            # 处理结果
+            completed = 0
+            valid_count = 0
+            
+            for future in as_completed(future_to_info):
+                info = future_to_info[future]
+                try:
+                    is_valid, message = future.result()
+                    completed += 1
+                    
+                    if is_valid:
+                        valid_count += 1
+                        valid_keys.append(info)
+                        # 隐藏部分密钥
+                        masked_key = info['api_key'][:10] + "..." + info['api_key'][-4:] if len(info['api_key']) > 14 else info['api_key']
+                        print(f"[{completed}/{len(future_to_info)}] ✓ Valid key from {info['channel_name']} ({masked_key})")
+                    else:
+                        masked_key = info['api_key'][:10] + "..." if len(info['api_key']) > 10 else info['api_key']
+                        print(f"[{completed}/{len(future_to_info)}] ✗ Invalid key from {info['channel_name']}: {message}")
+                    
+                except Exception as e:
+                    completed += 1
+                    log_error(f"Error testing key: {e}")
+        
+        log_info(f"Found {valid_count} valid keys out of {len(tested_keys)} tested")
+        return valid_keys
     
     def export_to_file(self, api_keys_info: List[Dict], output_file: str,
                       format: str = 'simple') -> bool:
@@ -272,6 +388,11 @@ Examples:
   %(prog)s --include-disabled                # Include disabled channels
   %(prog)s --status 1                        # Only enabled channels
   %(prog)s --type 24                         # Only Gemini channels (type 24)
+  
+  # Export only valid keys (test before export)
+  %(prog)s --valid-only                      # Export only valid API keys
+  %(prog)s --valid-only -o valid_keys.txt    # Export valid keys to specific file
+  %(prog)s --valid-only --workers 10         # Test with 10 concurrent workers
         """
     )
     
@@ -289,7 +410,7 @@ Examples:
     
     # 导出参数
     parser.add_argument('-o', '--output',
-                       help='Output file (default: api_keys_TIMESTAMP.txt)')
+                       help='Output file (default: api_keys_TIMESTAMP.txt or valid_keys_TIMESTAMP.txt)')
     parser.add_argument('--format', choices=['simple', 'detailed', 'csv'],
                        default='simple',
                        help='Export format (default: simple)')
@@ -301,6 +422,14 @@ Examples:
                        help='Include disabled channels')
     parser.add_argument('--no-summary', action='store_true',
                        help='Skip printing summary')
+    
+    # 有效性测试参数
+    parser.add_argument('--valid-only', action='store_true',
+                       help='Export only valid API keys (will test each key)')
+    parser.add_argument('--workers', type=int, default=5,
+                       help='Number of concurrent workers for testing (default: 5)')
+    parser.add_argument('--test-model', default='gemini-2.5-flash',
+                       help='Model to use for testing (default: gemini-2.5-flash)')
     
     args = parser.parse_args()
     
@@ -344,13 +473,27 @@ Examples:
         exporter.close()
         return 1
     
+    # 如果需要只导出有效的密钥，先进行测试
+    if args.valid_only:
+        api_keys_info = exporter.filter_valid_keys(
+            api_keys_info, 
+            max_workers=args.workers,
+            model=args.test_model
+        )
+        
+        if not api_keys_info:
+            log_warning("No valid API keys found after testing")
+            exporter.close()
+            return 1
+    
     # 确定输出文件名
     if args.output:
         output_file = args.output
     else:
         timestamp = get_timestamp()
         ext = 'csv' if args.format == 'csv' else 'txt'
-        output_file = f"api_keys_{timestamp}.{ext}"
+        prefix = 'valid_keys' if args.valid_only else 'api_keys'
+        output_file = f"{prefix}_{timestamp}.{ext}"
     
     # 导出到文件
     success = exporter.export_to_file(api_keys_info, output_file, args.format)
