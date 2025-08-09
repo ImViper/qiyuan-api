@@ -16,6 +16,7 @@
 | `test_api_keys.py` | API密钥有效性测试工具（支持Gemini） | `python test_api_keys.py --model gemini-2.5-flash` |
 | `export_api_keys.py` | 导出数据库中的API密钥到文件 | `python export_api_keys.py -o keys.txt` |
 | `batch_test_keys.py` | 批量测试API密钥（默认gemini-2.5-flash） | `python batch_test_keys.py --workers 10` |
+| `clean_database.py` | 数据库智能清理工具（保留结构） | `python clean_database.py --list` |
 | `utils.py` | 通用工具库（被其他脚本引用） | - |
 | `test_python_scripts.py` | 测试脚本兼容性 | `python test_python_scripts.py` |
 
@@ -259,6 +260,62 @@ go run test_gemini_keys.go -export results.json
 成功标志：
 - ✅ API密钥有效
 - ❌ API密钥无效或错误
+
+## 🗑️ 数据库清理工具
+
+### 智能数据库清理
+
+`clean_database.py` 提供智能的数据库清理功能，可以清空数据但保留表结构：
+
+```bash
+# 查看所有表的详细信息
+python clean_database.py --list
+
+# 显示数据库统计信息
+python clean_database.py --stats
+
+# 交互式选择要清理的表
+python clean_database.py
+
+# 清理所有日志类表
+python clean_database.py --clean-logs
+
+# 清理指定的表
+python clean_database.py --clean logs quota_data
+
+# 清理所有表（危险！需要确认）
+python clean_database.py --clean-all --confirm
+
+# 跳过备份直接清理（不推荐）
+python clean_database.py --clean logs --no-backup
+```
+
+### 表分类和重要性
+
+脚本会显示每个表的：
+- **功能描述**：表的用途说明
+- **清理影响**：清空后的具体影响
+- **重要性级别**：
+  - 🔴 CRITICAL - 系统核心表（channels, users, setups）
+  - 🟡 HIGH - 重要功能表（tokens, options, abilities）
+  - 🔵 MEDIUM - 业务数据表（redemptions, topups, tasks）
+  - 🟢 LOW - 日志记录表（logs, quota_data, midjourneys）
+
+### 安全特性
+
+1. **自动备份**：清理前自动备份到 `backups/` 目录
+2. **确认机制**：清理关键表需要输入 'CLEAN' 确认
+3. **影响分析**：清理前显示详细的影响说明
+4. **颜色标识**：不同重要性用不同颜色标识
+
+### 推荐使用场景
+
+- **日常维护**：定期清理日志表释放空间
+- **测试环境**：快速重置测试数据
+- **系统迁移**：清理历史数据后迁移
+- **问题排查**：清理特定表排查问题
+
+详细的表说明请查看 [DATABASE_TABLES.md](DATABASE_TABLES.md)
 
 ## 故障排除
 
