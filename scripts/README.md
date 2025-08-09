@@ -14,6 +14,8 @@
 | `docker_helper.py` | Docker Compose渠道管理助手 | `python docker_helper.py check` |
 | `run_export.py` | 快速导出渠道数据 | `python run_export.py -f json` |
 | `test_api_keys.py` | API密钥有效性测试工具（支持Gemini） | `python test_api_keys.py --model gemini-2.5-flash` |
+| `export_api_keys.py` | 导出数据库中的API密钥到文件 | `python export_api_keys.py -o keys.txt` |
+| `batch_test_keys.py` | 批量测试API密钥（默认gemini-2.5-flash） | `python batch_test_keys.py --workers 10` |
 | `utils.py` | 通用工具库（被其他脚本引用） | - |
 | `test_python_scripts.py` | 测试脚本兼容性 | `python test_python_scripts.py` |
 
@@ -150,14 +152,53 @@ mysql:
 
 ### 测试Gemini API密钥有效性
 
-支持两种方式测试Gemini API密钥：
+支持多种方式测试和管理Gemini API密钥：
 
-#### Python版本（推荐）
+#### 1. 导出API密钥到文件
+```bash
+# 导出所有启用的Gemini渠道密钥
+python export_api_keys.py
+
+# 导出到指定文件
+python export_api_keys.py -o api_keys.txt
+
+# 导出为CSV格式（包含渠道信息）
+python export_api_keys.py --format csv -o keys.csv
+
+# 导出详细格式（包含注释）
+python export_api_keys.py --format detailed
+
+# 包含禁用的渠道
+python export_api_keys.py --include-disabled
+```
+
+#### 2. 批量测试API密钥（推荐）
+```bash
+# 从数据库批量测试所有密钥（默认使用gemini-2.5-flash）
+python batch_test_keys.py
+
+# 设置并发数
+python batch_test_keys.py --workers 10
+
+# 保存测试结果
+python batch_test_keys.py --save-results results.txt
+
+# 先导出再测试
+python batch_test_keys.py --export-first
+
+# 从文件读取密钥测试
+python batch_test_keys.py --from-file api_keys.txt
+
+# 指定其他模型
+python batch_test_keys.py --model gemini-2.5-pro
+```
+
+#### 3. 单独测试功能
 ```bash
 # 测试所有Gemini渠道
 python test_api_keys.py
 
-# 指定测试模型
+# 指定测试模型（默认gemini-2.5-flash）
 python test_api_keys.py --model gemini-2.5-flash
 
 # 仅测试启用的渠道
