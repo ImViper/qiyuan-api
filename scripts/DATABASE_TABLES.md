@@ -333,6 +333,43 @@ python clean_database.py --clean logs quota_data midjourneys tasks redemptions t
 ```
 保留用户、渠道和配置，只清理业务数据
 
+## 🔄 系统自动初始化机制
+
+### 清空所有数据后的自动恢复
+
+当清空所有表数据后，系统重启时会：
+
+1. **自动创建默认账户**
+   - 检测到 `users` 表为空时，自动创建root账户
+   - 默认用户名：`root`
+   - 默认密码：`123456`
+   - 默认配额：100,000,000
+
+2. **自动初始化系统**
+   - 创建 `setups` 表记录，标记系统已初始化
+   - 加载默认系统配置
+   - 启用基本功能
+
+3. **需要手动恢复的内容**
+   - AI渠道配置（channels表）
+   - API访问令牌（tokens表）
+   - 模型路由规则（abilities表）
+   - 自定义系统设置（options表）
+
+### 快速重置系统
+
+```bash
+# 完全重置（清空所有数据）
+python clean_database.py --clean-all --confirm
+
+# 重启服务让系统自动初始化
+docker-compose restart new-api
+
+# 使用默认账户登录
+# 用户名: root
+# 密码: 123456
+```
+
 ## ⚠️ 注意事项
 
 1. **备份优先**: 任何清理操作前都应该备份
@@ -340,6 +377,7 @@ python clean_database.py --clean logs quota_data midjourneys tasks redemptions t
 3. **关键表谨慎**: channels、users、setups 表清理需特别谨慎
 4. **测试环境**: 建议先在测试环境验证
 5. **定期维护**: 定期清理日志表可以提高性能
+6. **自动初始化**: 清空users表后系统会自动创建root账户（密码123456）
 
 ## 🔄 恢复方法
 

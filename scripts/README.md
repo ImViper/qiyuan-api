@@ -301,6 +301,15 @@ python clean_database.py --clean logs --no-backup
   - 🔵 MEDIUM - 业务数据表（redemptions, topups, tasks）
   - 🟢 LOW - 日志记录表（logs, quota_data, midjourneys）
 
+### 系统自动初始化
+
+**清空所有数据后，系统会自动初始化**：
+- ✅ 自动创建root账户（用户名: root，密码: 123456）
+- ✅ 自动创建系统初始化记录
+- ✅ 加载默认系统配置
+- ❌ 需要手动重新配置AI渠道
+- ❌ 需要手动重新生成API令牌
+
 ### 安全特性
 
 1. **自动备份**：清理前自动备份到 `backups/` 目录
@@ -310,10 +319,28 @@ python clean_database.py --clean logs --no-backup
 
 ### 推荐使用场景
 
-- **日常维护**：定期清理日志表释放空间
-- **测试环境**：快速重置测试数据
-- **系统迁移**：清理历史数据后迁移
-- **问题排查**：清理特定表排查问题
+#### 场景1：完全重置系统
+```bash
+# 清空所有数据
+python clean_database.py --clean-all --confirm
+
+# 重启服务
+docker-compose restart new-api
+
+# 使用 root/123456 登录重新配置
+```
+
+#### 场景2：保留配置清理数据
+```bash
+# 只清理日志和业务数据，保留用户和配置
+python clean_database.py --clean logs quota_data midjourneys tasks redemptions topups
+```
+
+#### 场景3：日常维护
+```bash
+# 定期清理日志表
+python clean_database.py --clean-logs
+```
 
 详细的表说明请查看 [DATABASE_TABLES.md](DATABASE_TABLES.md)
 
