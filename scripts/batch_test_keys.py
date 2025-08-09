@@ -10,7 +10,7 @@ import sys
 import time
 import argparse
 import requests
-from typing import List, Tuple
+from typing import List, Tuple, Dict
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 # 添加当前目录到路径
@@ -22,6 +22,106 @@ from utils import (
 )
 
 from export_api_keys import APIKeyExporter
+
+
+class DatabaseCleaner:
+    """数据库清理器 - 用于清理无效的API密钥"""
+    
+    def __init__(self, host: str = "localhost", port: int = 3306,
+                 user: str = "root", password: str = "123456",
+                 database: str = "new-api"):
+        """初始化清理器"""
+        self.host = host
+        self.port = port
+        self.user = user
+        self.password = password
+        self.database = database
+        self.connection = None
+        
+    def connect_db(self):
+        """连接数据库"""
+        try:
+            import pymysql
+            self.connection = pymysql.connect(
+                host=self.host,
+                port=self.port,
+                user=self.user,
+                password=self.password,
+                database=self.database,
+                charset='utf8mb4',
+                cursorclass=pymysql.cursors.DictCursor
+            )
+            return True
+        except Exception as e:
+            log_error(f"Failed to connect to database: {e}")
+            return False
+    
+    def remove_invalid_keys(self, invalid_keys: List[str], channel_info: Dict[int, Dict]) -> int:
+        """
+        从数据库中删除无效的API密钥
+        
+        Args:
+            invalid_keys: 无效的API密钥列表
+            channel_info: 渠道信息字典 {channel_id: {'name': '', 'keys': []}}
+        
+        Returns:
+            删除的密钥数量
+        """
+        if not self.connection:
+            if not self.connect_db():
+                return 0
+        
+        removed_count = 0
+        
+        try:
+            with self.connection.cursor() as cursor:
+                # 处理每个渠道
+                for channel_id, info in channel_info.items():
+                    channel_name = info['name']
+                    all_keys = info['keys']
+                    
+                    # 找出这个渠道中的有效密钥（不在无效列表中的）
+                    valid_keys = [k for k in all_keys if k not in invalid_keys]
+                    
+                    if len(valid_keys) < len(all_keys):
+                        # 有密钥需要删除
+                        removed_from_channel = len(all_keys) - len(valid_keys)
+                        
+                        if valid_keys:
+                            # 还有有效密钥，更新渠道
+                            new_keys = '\n'.join(valid_keys)
+                            sql = "UPDATE channels SET `key` = %s WHERE id = %s"
+                            cursor.execute(sql, (new_keys, channel_id))
+                            log_info(f"Channel '{channel_name}' (ID: {channel_id}): Removed {removed_from_channel} invalid keys, {len(valid_keys)} keys remaining")
+                        else:
+                            # 没有有效密钥了，可以选择禁用渠道或删除所有密钥
+                            # 这里选择禁用渠道
+                            sql = "UPDATE channels SET status = 2, `key` = '' WHERE id = %s"
+                            cursor.execute(sql, (channel_id,))
+                            log_warning(f"Channel '{channel_name}' (ID: {channel_id}): All keys invalid, channel disabled")
+                        
+                        removed_count += removed_from_channel
+                
+                # 提交更改
+                if removed_count > 0:
+                    self.connection.commit()
+                    log_success(f"Successfully removed {removed_count} invalid keys from database")
+                else:
+                    log_info("No invalid keys to remove")
+                    
+        except Exception as e:
+            log_error(f"Failed to remove invalid keys: {e}")
+            if self.connection:
+                self.connection.rollback()
+            removed_count = 0
+        
+        return removed_count
+    
+    def close(self):
+        """关闭数据库连接"""
+        if self.connection:
+            self.connection.close()
+            self.connection = None
 
 
 def test_gemini_key(api_key: str, model: str = "gemini-2.5-flash", timeout: int = 10) -> Tuple[bool, str, float]:
@@ -84,7 +184,8 @@ def test_gemini_key(api_key: str, model: str = "gemini-2.5-flash", timeout: int 
 
 
 def batch_test_keys(api_keys: List[str], model: str = "gemini-2.5-flash", 
-                   max_workers: int = 5, output_file: str = None) -> List[dict]:
+                   max_workers: int = 5, output_file: str = None,
+                   channel_info: Dict[int, Dict] = None) -> Tuple[List[dict], Dict[str, List]]:
     """
     批量测试API密钥
     
@@ -93,16 +194,19 @@ def batch_test_keys(api_keys: List[str], model: str = "gemini-2.5-flash",
         model: 测试模型
         max_workers: 最大并发数
         output_file: 结果输出文件
+        channel_info: 渠道信息（用于清理功能）
     
     Returns:
-        测试结果列表
+        (测试结果列表, {'valid': [有效密钥], 'invalid': [无效密钥]})
     """
     results = []
+    valid_keys = []
+    invalid_keys = []
     total = len(api_keys)
     
     if total == 0:
         log_warning("No API keys to test")
-        return results
+        return results, {'valid': valid_keys, 'invalid': invalid_keys}
     
     log_info(f"Testing {total} API keys with model: {model}")
     log_info(f"Using {max_workers} concurrent workers")
@@ -126,8 +230,10 @@ def batch_test_keys(api_keys: List[str], model: str = "gemini-2.5-flash",
                 
                 if success:
                     valid_count += 1
+                    valid_keys.append(key)
                     status = "[VALID]"
                 else:
+                    invalid_keys.append(key)
                     status = "[INVALID]"
                 
                 # 隐藏部分密钥
@@ -177,7 +283,7 @@ def batch_test_keys(api_keys: List[str], model: str = "gemini-2.5-flash",
         avg_time = sum(valid_times) / len(valid_times)
         print(f"Average response time: {avg_time:.0f}ms")
     
-    return results
+    return results, {'valid': valid_keys, 'invalid': invalid_keys}
 
 
 def save_results(results: List[dict], output_file: str):
@@ -224,6 +330,7 @@ This script can:
 1. Export API keys from database
 2. Test them in batch with gemini-2.5-flash model
 3. Save results to file
+4. Clean invalid keys from database (optional)
 
 Examples:
   # Test all enabled Gemini channels from database
@@ -246,6 +353,12 @@ Examples:
   
   # Set concurrent workers
   %(prog)s --workers 10
+  
+  # Clean invalid keys from database after testing
+  %(prog)s --clean-invalid
+  
+  # Clean without confirmation (dangerous!)
+  %(prog)s --clean-invalid --no-confirm
         """
     )
     
@@ -279,9 +392,18 @@ Examples:
     parser.add_argument('--save-results',
                        help='Save test results to file')
     
+    # 清理参数
+    parser.add_argument('--clean-invalid', action='store_true',
+                       help='Remove invalid API keys from database after testing')
+    parser.add_argument('--no-confirm', action='store_true',
+                       help='Skip confirmation when cleaning invalid keys')
+    
     args = parser.parse_args()
     
     api_keys = []
+    
+    # 初始化channel_info
+    channel_info = {}
     
     # 从文件读取密钥
     if args.from_file:
@@ -323,9 +445,24 @@ Examples:
             exporter.close()
             return 1
         
-        # 提取API密钥
+        # 提取API密钥并构建渠道信息
         api_keys_info = exporter.extract_api_keys(channels)
         api_keys = [info['api_key'] for info in api_keys_info]
+        
+        # 构建渠道信息字典（用于清理功能）
+        channel_info = {}
+        if args.clean_invalid:
+            for channel in channels:
+                channel_id = channel.get('id')
+                channel_name = channel.get('name', 'Unknown')
+                key_str = channel.get('key', '')
+                keys = [k.strip() for k in key_str.split('\n') if k.strip() and not k.startswith('[') and not k.startswith('{')]
+                
+                if keys:
+                    channel_info[channel_id] = {
+                        'name': channel_name,
+                        'keys': keys
+                    }
         
         log_info(f"Found {len(api_keys)} API keys from {len(channels)} channels")
         
@@ -341,12 +478,53 @@ Examples:
         return 1
     
     # 批量测试
-    results = batch_test_keys(
+    results, key_status = batch_test_keys(
         api_keys,
         model=args.model,
         max_workers=args.workers,
-        output_file=args.save_results
+        output_file=args.save_results,
+        channel_info=channel_info if args.clean_invalid else None
     )
+    
+    # 清理无效密钥（如果启用）
+    if args.clean_invalid and not args.from_file:
+        invalid_keys = key_status.get('invalid', [])
+        
+        if invalid_keys:
+            print("\n" + "=" * 60)
+            print("INVALID KEYS FOUND")
+            print("=" * 60)
+            print(f"Found {len(invalid_keys)} invalid API keys")
+            
+            if not args.no_confirm:
+                print("\nThe following operations will be performed:")
+                print("1. Remove invalid keys from channels")
+                print("2. Disable channels with no valid keys")
+                print("\nThis operation CANNOT be undone!")
+                
+                confirm = input("\nAre you sure you want to clean invalid keys? (yes/N): ")
+                if confirm.lower() != 'yes':
+                    log_warning("Cleaning cancelled by user")
+                    return 0
+            
+            # 执行清理
+            cleaner = DatabaseCleaner(
+                host=args.host,
+                port=args.port,
+                user=args.user,
+                password=args.password,
+                database=args.database
+            )
+            
+            removed_count = cleaner.remove_invalid_keys(invalid_keys, channel_info)
+            cleaner.close()
+            
+            if removed_count > 0:
+                log_success(f"Cleaned {removed_count} invalid keys from database")
+            else:
+                log_info("No keys were removed")
+        else:
+            log_info("All tested keys are valid, no cleaning needed")
     
     # 返回状态
     valid_count = sum(1 for r in results if r['success'])

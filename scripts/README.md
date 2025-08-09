@@ -15,7 +15,7 @@
 | `run_export.py` | 快速导出渠道数据 | `python run_export.py -f json` |
 | `test_api_keys.py` | API密钥有效性测试工具（支持Gemini） | `python test_api_keys.py --model gemini-2.5-flash` |
 | `export_api_keys.py` | 导出API密钥（支持只导出有效密钥） | `python export_api_keys.py --valid-only` |
-| `batch_test_keys.py` | 批量测试API密钥（默认gemini-2.5-flash） | `python batch_test_keys.py --workers 10` |
+| `batch_test_keys.py` | 批量测试API密钥（支持清理无效密钥） | `python batch_test_keys.py --clean-invalid` |
 | `clean_database.py` | 数据库智能清理工具（保留结构） | `python clean_database.py --list` |
 | `utils.py` | 通用工具库（被其他脚本引用） | - |
 | `test_python_scripts.py` | 测试脚本兼容性 | `python test_python_scripts.py` |
@@ -204,7 +204,19 @@ python batch_test_keys.py --from-file api_keys.txt
 
 # 指定其他模型
 python batch_test_keys.py --model gemini-2.5-pro
+
+# 🔥 测试并清理无效密钥（从数据库删除）
+python batch_test_keys.py --clean-invalid
+
+# 清理无效密钥（跳过确认，危险！）
+python batch_test_keys.py --clean-invalid --no-confirm
 ```
+
+**清理功能说明**：
+- `--clean-invalid`: 测试后自动删除数据库中的无效密钥
+- 如果渠道所有密钥都无效，会自动禁用该渠道
+- 需要确认操作（输入 'yes'），除非使用 `--no-confirm`
+- ⚠️ **此操作不可撤销，请谨慎使用！**
 
 #### 3. 单独测试功能
 ```bash
