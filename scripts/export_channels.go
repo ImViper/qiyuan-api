@@ -93,7 +93,7 @@ func printHelp() {
 // 获取所有渠道（简化版） - 只查询必需字段
 func getChannels(db *gorm.DB) ([]common.LightChannel, error) {
 	var channels []common.LightChannel
-	return channels, db.Table("channels").Select("id, type, key, name, status, balance, models, group, created_time").Find(&channels).Error
+	return channels, db.Table("channels").Select("id, type, `key`, name, status, balance, models, `group`, created_time").Find(&channels).Error
 }
 
 // 简化的密钥隐藏

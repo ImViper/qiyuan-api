@@ -1,285 +1,112 @@
-# 渠道管理脚本
+# Scripts 目录
 
-这个目录包含用于导入、导出和管理渠道数据的完整工具集。
+本目录包含用于管理渠道数据的Python脚本和Go工具。
 
-## 文件说明
+## 🐍 Python脚本（跨平台）
+
+所有Python脚本都支持Windows、Linux和macOS，解决了之前批处理和Shell脚本的兼容性问题。
 
 ### 核心脚本
-- `channel_manager.go` - 完整的渠道管理脚本（导入/导出/备份/恢复）
-- `export_channels.go` - 轻量级快速导出脚本（简化版本）
-- `common/types.go` - 共享类型和工具函数
 
-### 辅助脚本
-- `docker_helper.sh` - Docker Compose 环境助手脚本（Linux/macOS）
-- `docker_helper.bat` - Docker Compose 环境助手脚本（Windows）
-- `reset_database.sh` - 安全数据库重置脚本（Linux/macOS）
-- `reset_database.bat` - 安全数据库重置脚本（Windows）
-- `run_export.sh` - 快速导出脚本（Linux/macOS）
-- `run_export.bat` - 快速导出脚本（Windows）
+| 脚本名称 | 功能描述 | 使用示例 |
+|---------|---------|---------|
+| `reset_database.py` | 数据库重置工具，支持备份和恢复 | `python reset_database.py --help` |
+| `docker_helper.py` | Docker Compose渠道管理助手 | `python docker_helper.py check` |
+| `run_export.py` | 快速导出渠道数据 | `python run_export.py -f json` |
+| `test_api_keys.py` | API密钥有效性测试工具（支持Gemini） | `python test_api_keys.py --model gemini-2.5-flash` |
+| `utils.py` | 通用工具库（被其他脚本引用） | - |
+| `test_python_scripts.py` | 测试脚本兼容性 | `python test_python_scripts.py` |
 
-## 使用方法
-
-### 1. Docker Compose 环境（推荐）
-
-如果您使用 Docker Compose 启动的 MySQL，推荐使用专门的助手脚本：
+### 快速开始
 
 ```bash
-# 进入脚本目录
-cd scripts
+# 检查环境
+python test_python_scripts.py
 
-# 检查服务状态和连接
-./docker_helper.sh check
+# 备份数据库
+python reset_database.py --backup-only
 
 # 导出渠道数据
-./docker_helper.sh export json
-./docker_helper.sh export csv channels.csv
+python run_export.py -f json -o channels.json
 
-# 备份所有渠道数据
-./docker_helper.sh backup
-
-# 导入渠道数据
-./docker_helper.sh import channels.json
-
-# 恢复渠道数据
-./docker_helper.sh restore backup.json
+# Docker环境管理
+python docker_helper.py check
+python docker_helper.py export csv
 ```
 
-### 2. 基本使用（通用方式）
+详细使用说明请查看 [PYTHON_SCRIPTS_README.md](PYTHON_SCRIPTS_README.md)
+
+## 🔧 Go工具
+
+| 文件名称 | 功能描述 |
+|---------|---------|
+| `channel_manager.go` | 核心渠道管理器，提供导入/导出/备份/恢复功能 |
+| `export_channels.go` | 渠道导出工具，支持多种格式 |
+| `test_gemini_keys.go` | Gemini API密钥批量测试工具 |
+| `common/types.go` | 共享的类型定义 |
+| `go.mod` / `go.sum` | Go模块依赖管理 |
+
+### Go工具使用
 
 ```bash
-# 进入脚本目录
+# 导出渠道
+go run export_channels.go -format json -output channels.json
+
+# 使用channel_manager
+go run channel_manager.go -action=export -format=json -output=channels.json
+go run channel_manager.go -action=backup -output=backup.json
+go run channel_manager.go -action=restore -input=backup.json
+```
+
+## 📁 测试数据
+
+- `test_channels.json` - 测试用的渠道数据样本
+
+## 系统要求
+
+- **Python**: 3.6 或更高版本
+- **Go**: 1.16 或更高版本
+- **数据库**: MySQL 5.7+ / PostgreSQL 9.6+ / SQLite
+
+## 安装依赖
+
+### Python
+Python脚本使用标准库，无需额外安装依赖。
+
+### Go
+```bash
 cd scripts
-
-# 导出所有渠道到JSON文件
-go run channel_manager.go -action=export
-
-# 导入渠道数据
-go run channel_manager.go -action=import -input=channels.json
-
-# 备份渠道数据
-go run channel_manager.go -action=backup
-
-# 恢复渠道数据
-go run channel_manager.go -action=restore -input=backup.json
+go mod tidy
 ```
 
-### 3. 快速导出（轻量级版本）
+## 环境变量
+
+可以通过环境变量配置数据库连接：
 
 ```bash
-# 使用轻量级导出脚本（推荐用于快速导出）
-go run export_channels.go
-
-# 导出到指定文件
-go run export_channels.go -output my_channels.json
-
-# 不隐藏API密钥
-go run export_channels.go -mask-keys=false
-
-# 指定数据库连接
-go run export_channels.go -dsn "root:123456@tcp(localhost:3306)/new-api"
-```
-
-**注意：** `export_channels.go` 仅支持JSON格式导出。如需CSV、TXT格式，请使用 `channel_manager.go`。
-
-### 4. 高级用法
-
-#### 导出相关
-
-```bash
-# 指定数据库连接
-go run channel_manager.go -action=export -dsn "root:123456@tcp(localhost:3306)/new-api"
-
-# 仅导出启用的渠道
-go run channel_manager.go -action=export -status 1
-
-# 仅导出OpenAI类型的渠道
-go run channel_manager.go -action=export -type 1
-
-# 导出为CSV格式
-go run channel_manager.go -action=export -format csv
-
-# 不隐藏API密钥（谨慎使用）
-go run channel_manager.go -action=export -mask-keys=false
-
-# 显示详细信息
-go run channel_manager.go -action=export -verbose
-```
-
-#### 导入相关
-
-```bash
-# 导入时跳过已存在的渠道（默认）
-go run channel_manager.go -action=import -input=channels.json -skip-existing
-
-# 导入时更新已存在的渠道
-go run channel_manager.go -action=import -input=channels.json -update-existing
-
-# 模拟导入（不实际操作数据库）
-go run channel_manager.go -action=import -input=channels.json -dry-run
-
-# 详细导入过程
-go run channel_manager.go -action=import -input=channels.json -verbose
-```
-
-#### 备份和恢复
-
-```bash
-# 完整备份（包含所有信息）
-go run channel_manager.go -action=backup -output=full_backup.json
-
-# 恢复前模拟（推荐）
-go run channel_manager.go -action=restore -input=backup.json -dry-run
-
-# 实际恢复（会删除现有数据）
-go run channel_manager.go -action=restore -input=backup.json
-```
-
-### 5. 数据库连接配置
-
-#### Docker Compose MySQL 配置
-
-如果您使用 Docker Compose，脚本会自动使用以下默认连接：
-
-```bash
-# Docker Compose 默认配置
-root:123456@tcp(localhost:3306)/new-api
-```
-
-**重要提示：**
-1. 确保 Docker Compose 中的 MySQL 服务正在运行
-2. 如果需要从主机连接，请在 `docker-compose.yml` 中启用端口映射：
-   ```yaml
-   mysql:
-     ports:
-       - "3306:3306"  # 取消注释这一行
-   ```
-
-#### 连接字符串优先级
-
-脚本会按以下优先级查找数据库连接：
-
-1. 命令行参数 `-dsn`
-2. 环境变量 `SQL_DSN`
-3. Docker Compose 默认值 `root:123456@tcp(localhost:3306)/new-api`
-
-#### 连接字符串示例
-
-```bash
-# Docker Compose MySQL（推荐）
-export SQL_DSN="root:123456@tcp(localhost:3306)/new-api"
-
-# 自定义 MySQL
-export SQL_DSN="user:password@tcp(localhost:3306)/database"
-
-# PostgreSQL
-export SQL_DSN="host=localhost user=username password=password dbname=database sslmode=disable"
-
-# SQLite
-export SQL_DSN="sqlite:data/new-api.db"
-```
-
-#### Docker 环境检查
-
-使用 Docker 助手脚本可以自动检查环境：
-
-```bash
-# 检查 Docker 服务和数据库连接
-./docker_helper.sh check
+# Linux/macOS
+export MYSQL_DSN="root:password@tcp(localhost:3306)/database"
 
 # Windows
-docker_helper.bat check
+set MYSQL_DSN=root:password@tcp(localhost:3306)/database
 ```
-
-### 4. 输出格式
-
-#### JSON格式（默认）
-```json
-{
-  "export_time": "2024-01-01 12:00:00",
-  "export_version": "1.0.0", 
-  "total_channels": 5,
-  "channels": [
-    {
-      "id": 1,
-      "name": "OpenAI官方",
-      "type": 1,
-      "status": 1,
-      "group": "default",
-      ...
-    }
-  ]
-}
-```
-
-#### CSV格式
-包含所有渠道字段的CSV文件，可用Excel打开。
-
-#### TXT格式
-人类可读的文本报告格式。
-
-### 5. 渠道类型和状态
-
-**渠道类型：**
-- 1: OpenAI
-- 3: Azure  
-- 21: Anthropic
-- 25: Gemini
-- 更多类型见脚本中的映射表
-
-**渠道状态：**
-- 1: 启用
-- 2: 手动禁用
-- 3: 自动禁用
-
-### 6. 安全注意事项
-
-- 默认情况下，脚本会隐藏API密钥的敏感部分
-- 使用 `-mask-keys=false` 可以导出完整密钥，但请谨慎处理
-- 导出的文件可能包含敏感信息，请妥善保管
-
-## 示例用法
-
-```bash
-# 快速导出所有渠道（轻量级）
-go run export_channels.go
-
-# 导出启用的OpenAI渠道到CSV（完整功能）
-go run channel_manager.go -action=export -type 1 -status 1 -format csv -output openai_channels.csv
-
-# 完整导出（包含API密钥）
-go run export_channels.go -mask-keys=false -output full_export.json
-
-# 连接远程MySQL数据库
-go run channel_manager.go -action=export -dsn "user:pass@tcp(remote-host:3306)/newapi" -verbose
-```
-
-## 故障排除
-
-1. **连接数据库失败**
-   - 检查数据库连接字符串是否正确
-   - 确保数据库服务正在运行
-   - 检查网络连接（远程数据库）
-
-2. **权限错误**
-   - 确保有数据库读取权限
-   - 检查输出目录的写入权限
-
-3. **依赖问题**
-   - 运行 `go mod tidy` 安装依赖
-   - 确保Go版本兼容
 
 ## 🔄 数据库重置
-
-如果您想重置数据库内容并确保数据安全，推荐使用专门的重置脚本：
 
 ### 安全重置流程
 
 ```bash
-# Linux/macOS
-./reset_database.sh
+# 完整的备份+重置流程
+python reset_database.py
 
-# Windows
-reset_database.bat
+# 仅创建备份
+python reset_database.py --backup-only
+
+# 从备份恢复
+python reset_database.py --restore backup.json
+
+# 模拟运行
+python reset_database.py --dry-run
 ```
 
 **重置流程包括：**
@@ -288,50 +115,140 @@ reset_database.bat
 3. 🗑️ 清空所有渠道数据
 4. 📋 显示可用备份文件
 
-### 重置选项
+## Docker Compose 支持
+
+### 使用Docker助手
 
 ```bash
-# 仅创建备份（不重置）
-./reset_database.sh --backup-only
+# 检查服务状态
+python docker_helper.py check
 
-# 从备份恢复数据
-./reset_database.sh --restore backup.json
+# 导出渠道数据
+python docker_helper.py export json
+python docker_helper.py export csv channels.csv
 
-# 模拟运行（查看将要执行的操作）
-./reset_database.sh --dry-run
+# 备份所有渠道
+python docker_helper.py backup
 
-# 指定备份目录
-./reset_database.sh --backup-dir ./my_backups
+# 导入渠道数据
+python docker_helper.py import channels.json
+
+# 恢复渠道数据
+python docker_helper.py restore backup.json
 ```
 
-### ⚠️ 安全提示
+### Docker Compose配置
 
-1. **自动备份**: 重置前会自动创建带时间戳的备份文件
-2. **确认机制**: 必须输入 'RESET' 才能执行重置操作  
-3. **恢复支持**: 可以随时从备份文件恢复数据
-4. **备份位置**: 默认保存在 `./backups/` 目录
+确保在 `docker-compose.yml` 中启用MySQL端口映射：
+```yaml
+mysql:
+  ports:
+    - "3306:3306"  # 启用端口映射以支持脚本连接
+```
 
-### 常见场景
+## 🔑 API密钥测试
 
+### 测试Gemini API密钥有效性
+
+支持两种方式测试Gemini API密钥：
+
+#### Python版本（推荐）
 ```bash
-# 完整的安全重置（推荐）
-./reset_database.sh
+# 测试所有Gemini渠道
+python test_api_keys.py
 
-# 清理测试数据前先备份
-./reset_database.sh --backup-only
-# 手动清理后如需恢复
-./reset_database.sh --restore backups/reset_backup_20240102_143000.json
+# 指定测试模型
+python test_api_keys.py --model gemini-2.5-flash
 
-# 定期备份
-./reset_database.sh --backup-only --backup-dir ./daily_backups
+# 仅测试启用的渠道
+python test_api_keys.py --status 1
+
+# 测试特定渠道
+python test_api_keys.py --channel-id 5
+
+# 直接测试API密钥（不查询数据库）
+python test_api_keys.py --api-key "YOUR_API_KEY"
+
+# 导出测试结果
+python test_api_keys.py --export results.json
+
+# 设置并发数
+python test_api_keys.py --workers 10
+
+# 列出支持的模型
+python test_api_keys.py --list-models
 ```
 
-## 扩展
+#### Go版本
+```bash
+# 测试所有Gemini渠道
+go run test_gemini_keys.go
 
-可以基于此脚本扩展更多功能：
-- 渠道数据备份和恢复
-- 渠道配置迁移  
-- 渠道状态监控
-- 批量渠道管理
-- 定时备份任务
-- 数据库健康检查
+# 指定测试模型
+go run test_gemini_keys.go -model gemini-2.5-flash
+
+# 测试特定渠道
+go run test_gemini_keys.go -channel-id 5
+
+# 直接测试API密钥
+go run test_gemini_keys.go -api-key "YOUR_API_KEY"
+
+# 导出结果
+go run test_gemini_keys.go -export results.json
+```
+
+### 支持的Gemini模型
+
+- gemini-2.5-flash （默认，推荐）
+- gemini-2.5-pro
+- gemini-1.5-pro
+- gemini-1.5-flash
+- gemini-2.0-flash
+- gemini-1.5-flash-8b
+
+### 测试结果说明
+
+测试脚本会：
+1. 从数据库查询所有Gemini类型的渠道
+2. 并发测试每个渠道的API密钥
+3. 显示每个渠道的测试结果和响应时间
+4. 生成测试摘要报告
+5. 可选导出详细结果到JSON文件
+
+成功标志：
+- ✅ API密钥有效
+- ❌ API密钥无效或错误
+
+## 故障排除
+
+### Windows中文乱码
+```batch
+chcp 65001
+```
+
+### 权限问题（Linux/macOS）
+```bash
+chmod +x *.py
+```
+
+### Go模块问题
+```bash
+go mod download
+go mod tidy
+```
+
+### API测试失败常见原因
+
+1. **403 Forbidden**: API密钥无效或被禁用
+2. **429 Too Many Requests**: 达到速率限制
+3. **404 Not Found**: 指定的模型不存在
+4. **Timeout**: 网络连接问题或API响应慢
+5. **Connection Error**: 无法连接到Gemini API服务器
+
+## 为什么使用Python？
+
+- ✅ **跨平台兼容**：一份代码，多平台运行
+- ✅ **更好的错误处理**：详细的错误信息和异常处理
+- ✅ **易于维护**：代码更清晰，调试更方便
+- ✅ **丰富的标准库**：无需额外依赖即可实现复杂功能
+- ✅ **Unicode支持**：完美处理中文和其他语言
