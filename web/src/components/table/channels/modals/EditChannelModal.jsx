@@ -85,6 +85,26 @@ const REGION_EXAMPLE = {
   'claude-3-5-sonnet-20240620': 'europe-west1',
 };
 
+// 支持并且已适配通过接口获取模型列表的渠道类型
+const MODEL_FETCHABLE_TYPES = new Set([
+  1,
+  4,
+  14,
+  34,
+  17,
+  26,
+  24,
+  47,
+  25,
+  20,
+  23,
+  31,
+  35,
+  40,
+  42,
+  48,
+]);
+
 function type2secretPrompt(type) {
   // inputs.type === 15 ? '按照如下格式输入：APIKey|SecretKey' : (inputs.type === 18 ? '按照如下格式输入：APPID|APISecret|APIKey' : '请输入渠道对应的鉴权密钥')
   switch (type) {
@@ -215,7 +235,7 @@ const EditChannelModal = (props) => {
     pass_through_body_enabled: false,
     system_prompt: '',
   });
-  const showApiConfigCard = inputs.type !== 45; // 控制是否显示 API 配置卡片（仅当渠道类型不是 豆包 时显示）
+  const showApiConfigCard = true; // 控制是否显示 API 配置卡片
   const getInitValues = () => ({ ...originInputs });
 
   // 处理渠道额外设置的更新
@@ -321,6 +341,10 @@ const EditChannelModal = (props) => {
           break;
         case 36:
           localModels = ['suno_music', 'suno_lyrics'];
+          break;
+        case 45:
+          localModels = getChannelModels(value);
+          setInputs((prevInputs) => ({ ...prevInputs, base_url: 'https://ark.cn-beijing.volces.com' }));
           break;
         default:
           localModels = getChannelModels(value);
@@ -820,6 +844,10 @@ const EditChannelModal = (props) => {
     }
     if (!Array.isArray(localInputs.models) || localInputs.models.length === 0) {
       showInfo(t('请至少选择一个模型！'));
+      return;
+    }
+    if (localInputs.type === 45 && (!localInputs.base_url || localInputs.base_url.trim() === '')) {
+      showInfo(t('请输入API地址！'));
       return;
     }
     if (
@@ -1789,6 +1817,30 @@ const EditChannelModal = (props) => {
                         />
                       </div>
                     )}
+
+                    {inputs.type === 45 && (
+                        <div>
+                          <Form.Select
+                              field='base_url'
+                              label={t('API地址')}
+                              placeholder={t('请选择API地址')}
+                              onChange={(value) =>
+                                  handleInputChange('base_url', value)
+                              }
+                              optionList={[
+                                {
+                                  value: 'https://ark.cn-beijing.volces.com',
+                                  label: 'https://ark.cn-beijing.volces.com'
+                                },
+                                {
+                                  value: 'https://ark.ap-southeast.bytepluses.com',
+                                  label: 'https://ark.ap-southeast.bytepluses.com'
+                                }
+                              ]}
+                              defaultValue='https://ark.cn-beijing.volces.com'
+                          />
+                        </div>
+                    )}
                   </Card>
                 )}
 
@@ -1872,13 +1924,15 @@ const EditChannelModal = (props) => {
                         >
                           {t('填入所有模型')}
                         </Button>
-                        <Button
-                          size='small'
-                          type='tertiary'
-                          onClick={() => fetchUpstreamModelList('models')}
-                        >
-                          {t('获取模型列表')}
-                        </Button>
+                        {MODEL_FETCHABLE_TYPES.has(inputs.type) && (
+                          <Button
+                            size='small'
+                            type='tertiary'
+                            onClick={() => fetchUpstreamModelList('models')}
+                          >
+                            {t('获取模型列表')}
+                          </Button>
+                        )}
                         <Button
                           size='small'
                           type='warning'
