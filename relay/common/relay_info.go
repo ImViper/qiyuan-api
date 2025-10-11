@@ -3,13 +3,14 @@ package common
 import (
 	"errors"
 	"fmt"
-	"one-api/common"
-	"one-api/constant"
-	"one-api/dto"
-	relayconstant "one-api/relay/constant"
-	"one-api/types"
 	"strings"
 	"time"
+
+	"github.com/QuantumNous/new-api/common"
+	"github.com/QuantumNous/new-api/constant"
+	"github.com/QuantumNous/new-api/dto"
+	relayconstant "github.com/QuantumNous/new-api/relay/constant"
+	"github.com/QuantumNous/new-api/types"
 
 	"github.com/gin-gonic/gin"
 	"github.com/gorilla/websocket"
@@ -261,6 +262,7 @@ var streamSupportedChannels = map[int]bool{
 	constant.ChannelTypeXai:        true,
 	constant.ChannelTypeDeepSeek:   true,
 	constant.ChannelTypeBaiduV2:    true,
+	constant.ChannelTypeZhipu_v4:   true,
 }
 
 func GenRelayInfoWs(c *gin.Context, ws *websocket.Conn) *RelayInfo {

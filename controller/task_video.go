@@ -5,16 +5,17 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"one-api/common"
-	"one-api/constant"
-	"one-api/dto"
-	"one-api/logger"
-	"one-api/model"
-	"one-api/relay"
-	"one-api/relay/channel"
-	relaycommon "one-api/relay/common"
-	"one-api/setting/ratio_setting"
 	"time"
+
+	"github.com/QuantumNous/new-api/common"
+	"github.com/QuantumNous/new-api/constant"
+	"github.com/QuantumNous/new-api/dto"
+	"github.com/QuantumNous/new-api/logger"
+	"github.com/QuantumNous/new-api/model"
+	"github.com/QuantumNous/new-api/relay"
+	"github.com/QuantumNous/new-api/relay/channel"
+	relaycommon "github.com/QuantumNous/new-api/relay/common"
+	"github.com/QuantumNous/new-api/setting/ratio_setting"
 )
 
 func UpdateVideoTaskAll(ctx context.Context, platform constant.TaskPlatform, taskChannelM map[int][]string, taskM map[string]*model.Task) error {
@@ -47,6 +48,11 @@ func updateVideoTaskAll(ctx context.Context, platform constant.TaskPlatform, cha
 	if adaptor == nil {
 		return fmt.Errorf("video adaptor not found")
 	}
+	info := &relaycommon.RelayInfo{}
+	info.ChannelMeta = &relaycommon.ChannelMeta{
+		ChannelBaseUrl: cacheGetChannel.GetBaseURL(),
+	}
+	adaptor.Init(info)
 	for _, taskId := range taskIds {
 		if err := updateVideoSingleTask(ctx, adaptor, cacheGetChannel, taskId, taskM); err != nil {
 			logger.LogError(ctx, fmt.Sprintf("Failed to update video task %s: %s", taskId, err.Error()))
@@ -92,6 +98,7 @@ func updateVideoSingleTask(ctx context.Context, adaptor channel.TaskAdaptor, cha
 		taskResult.Url = t.FailReason
 		taskResult.Progress = t.Progress
 		taskResult.Reason = t.FailReason
+		task.Data = t.Data
 	} else if taskResult, err = adaptor.ParseTaskResult(responseBody); err != nil {
 		return fmt.Errorf("parseTaskResult failed for task %s: %w", taskId, err)
 	} else {

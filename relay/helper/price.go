@@ -2,10 +2,11 @@ package helper
 
 import (
 	"fmt"
-	"one-api/common"
-	relaycommon "one-api/relay/common"
-	"one-api/setting/ratio_setting"
-	"one-api/types"
+
+	"github.com/QuantumNous/new-api/common"
+	relaycommon "github.com/QuantumNous/new-api/relay/common"
+	"github.com/QuantumNous/new-api/setting/ratio_setting"
+	"github.com/QuantumNous/new-api/types"
 
 	"github.com/gin-gonic/gin"
 )
@@ -114,7 +115,7 @@ func ModelPriceHelperPerCall(c *gin.Context, info *relaycommon.RelayInfo) types.
 	modelPrice, success := ratio_setting.GetModelPrice(info.OriginModelName, true)
 	// 如果没有配置价格，则使用默认价格
 	if !success {
-		defaultPrice, ok := ratio_setting.GetDefaultModelRatioMap()[info.OriginModelName]
+		defaultPrice, ok := ratio_setting.GetDefaultModelPriceMap()[info.OriginModelName]
 		if !ok {
 			modelPrice = 0.1
 		} else {

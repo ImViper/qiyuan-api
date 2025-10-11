@@ -5,14 +5,15 @@ import (
 	"io"
 	"log"
 	"net/http"
-	"one-api/common"
-	"one-api/model"
-	"one-api/setting"
-	"one-api/setting/operation_setting"
-	"one-api/setting/system_setting"
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/QuantumNous/new-api/common"
+	"github.com/QuantumNous/new-api/model"
+	"github.com/QuantumNous/new-api/setting"
+	"github.com/QuantumNous/new-api/setting/operation_setting"
+	"github.com/QuantumNous/new-api/setting/system_setting"
 
 	"github.com/gin-gonic/gin"
 	"github.com/stripe/stripe-go/v81"
@@ -83,12 +84,13 @@ func (*StripeAdaptor) RequestPay(c *gin.Context, req *StripePayRequest) {
 	}
 
 	topUp := &model.TopUp{
-		UserId:     id,
-		Amount:     req.Amount,
-		Money:      chargedMoney,
-		TradeNo:    referenceId,
-		CreateTime: time.Now().Unix(),
-		Status:     common.TopUpStatusPending,
+		UserId:        id,
+		Amount:        req.Amount,
+		Money:         chargedMoney,
+		TradeNo:       referenceId,
+		PaymentMethod: PaymentMethodStripe,
+		CreateTime:    time.Now().Unix(),
+		Status:        common.TopUpStatusPending,
 	}
 	err = topUp.Insert()
 	if err != nil {
