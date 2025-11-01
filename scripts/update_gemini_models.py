@@ -87,7 +87,7 @@ class GeminiModelUpdater:
         try:
             with self.connection.cursor() as cursor:
                 sql = """
-                    SELECT id, name, type, models, status
+                    SELECT id, name, type, models, test_model, status
                     FROM channels
                     WHERE type = %s
                     ORDER BY id
@@ -99,18 +99,20 @@ class GeminiModelUpdater:
             log_error(f"Failed to fetch Gemini channels: {e}")
             return []
 
-    def update_channel_models(self, channel_id: int, new_models: str, dry_run: bool = True) -> bool:
-        """更新渠道模型"""
+    def update_channel_models(self, channel_id: int, new_models: str, test_model: str, dry_run: bool = True) -> bool:
+        """更新渠道模型和测试模型"""
         try:
             if dry_run:
-                log_info(f"[DRY RUN] Would update channel {channel_id} models to: {new_models}")
+                log_info(f"[DRY RUN] Would update channel {channel_id}:")
+                log_info(f"  - models: {new_models}")
+                log_info(f"  - test_model: {test_model}")
                 return True
 
             with self.connection.cursor() as cursor:
-                sql = "UPDATE channels SET models = %s WHERE id = %s"
-                cursor.execute(sql, (new_models, channel_id))
+                sql = "UPDATE channels SET models = %s, test_model = %s WHERE id = %s"
+                cursor.execute(sql, (new_models, test_model, channel_id))
                 self.connection.commit()
-                log_success(f"Updated channel {channel_id} models")
+                log_success(f"Updated channel {channel_id} models and test_model")
                 return True
         except Exception as e:
             log_error(f"Failed to update channel {channel_id}: {e}")
@@ -148,6 +150,7 @@ class GeminiModelUpdater:
 
             # 新模型列表（逗号分隔）
             new_models_str = ",".join(GEMINI_25_MODELS)
+            test_model = "gemini-2.5-flash"
 
             # 显示将要更新的渠道
             log_info("Channels to be updated:")
@@ -157,6 +160,7 @@ class GeminiModelUpdater:
                 channel_id = channel['id']
                 channel_name = channel['name']
                 current_models = channel['models'] or ""
+                current_test_model = channel.get('test_model') or ""
                 status = "Enabled" if channel['status'] == 1 else "Disabled"
 
                 print(f"\n{colors.BLUE}Channel ID:{colors.NC} {channel_id}")
@@ -169,9 +173,13 @@ class GeminiModelUpdater:
                 else:
                     print(f"  (empty)")
 
+                print(f"{colors.YELLOW}Current test_model:{colors.NC} {current_test_model or '(empty)'}")
+
                 print(f"{colors.GREEN}New models:{colors.NC}")
                 for model in GEMINI_25_MODELS:
                     print(f"  - {model}")
+
+                print(f"{colors.GREEN}New test_model:{colors.NC} {test_model}")
 
             print()
             log_info("-" * 60)
@@ -191,7 +199,7 @@ class GeminiModelUpdater:
 
             for channel in channels:
                 channel_id = channel['id']
-                if self.update_channel_models(channel_id, new_models_str, dry_run):
+                if self.update_channel_models(channel_id, new_models_str, test_model, dry_run):
                     success_count += 1
                 else:
                     fail_count += 1
