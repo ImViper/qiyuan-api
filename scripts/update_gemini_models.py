@@ -41,8 +41,8 @@ GEMINI_25_MODELS = [
     "gemini-2.5-flash-lite-preview-06-17",
 ]
 
-# Gemini 渠道类型 ID (根据项目常量定义)
-GEMINI_CHANNEL_TYPE = 14
+# Gemini 渠道类型 ID (根据项目常量定义 constant.ChannelTypeGemini)
+GEMINI_CHANNEL_TYPE = 24
 
 
 class GeminiModelUpdater:
