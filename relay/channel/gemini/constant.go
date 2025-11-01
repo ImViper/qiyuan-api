@@ -1,6 +1,10 @@
 package gemini
 
 var ModelList = []string{
+	// gemini 2.5 series
+	"gemini-2.5-flash", "gemini-2.5-pro", "gemini-2.5-flash-lite",
+	"gemini-2.5-pro-preview-03-25", "gemini-2.5-pro-preview-05-06", "gemini-2.5-pro-preview-06-05",
+	"gemini-2.5-flash-preview-05-20", "gemini-2.5-flash-lite-preview-06-17",
 	// stable version
 	"gemini-1.5-pro", "gemini-1.5-flash", "gemini-1.5-flash-8b",
 	"gemini-2.0-flash",
@@ -18,7 +22,6 @@ var ModelList = []string{
 	// thinking exp
 	"gemini-2.0-flash-thinking-exp",
 	"gemini-2.5-pro-exp-03-25",
-	"gemini-2.5-pro-preview-03-25",
 	// imagen models
 	"imagen-3.0-generate-002",
 	// embedding models
