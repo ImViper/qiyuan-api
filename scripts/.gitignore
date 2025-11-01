@@ -1,0 +1,70 @@
+# 编译产生的可执行文件
+*.exe
+*.bin
+
+# 临时导出文件
+channels_export_*.json
+channels_export_*.csv
+channels_export_*.txt
+channels_backup_*.json
+
+# API密钥导出文件
+api_keys_*.txt
+api_keys_*.csv
+valid_keys_*.txt
+valid_keys_*.csv
+exported_keys_*.txt
+keys.txt
+keys.csv
+
+# 测试结果文件
+test_results_*.txt
+test_results_*.json
+results_*.txt
+results_*.json
+results.txt
+
+# 数据库备份文件
+*.sql
+backup_*.json
+restore_*.json
+
+# 备份目录
+backups/
+backup_*/
+
+# Python缓存
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+
+# Go 模块缓存
+go.sum
+
+# Go 工作区
+go.work
+go.work.sum
+
+# 测试文件（可选）
+test_channels.json
+
+# 日志文件
+*.log
+
+# 临时文件
+*.tmp
+*.temp
+
+# 编辑器文件
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# 系统文件
+.DS_Store
+Thumbs.db
+desktop.ini__pycache__/
