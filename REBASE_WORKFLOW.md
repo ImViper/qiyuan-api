@@ -7,6 +7,13 @@
 - **主分支 (main)**: 保持与上游完全一致
 - **开发分支 (qiyuan-api)**: 基于 main，包含自定义改动
 
+## 相关文档
+
+- **REBASE_WORKFLOW.md**（本文档）: 同步和 rebase 的操作流程
+- **UPSTREAM_CHANGELOG.md**: 记录每次从上游同步的更新内容
+
+**推荐做法：** 每次同步后更新 UPSTREAM_CHANGELOG.md，记录新功能和重要修复，方便以后查阅。
+
 ## 定期同步流程
 
 ### 前置检查
@@ -78,7 +85,36 @@ git log --oneline -5
 git status
 ```
 
-### Step 4: Rebase 开发分支
+### Step 4: 记录更新内容（可选但推荐）
+
+在 rebase 之前，记录本次从上游同步的更新内容，方便以后查阅。
+
+```bash
+# 记录本次更新的起止提交
+OLD_COMMIT=$(git rev-parse main)  # rebase 前的 main
+# 更新 main 后再执行
+NEW_COMMIT=$(git rev-parse main)  # rebase 后的 main
+
+# 查看更新概览
+git log ${OLD_COMMIT}..${NEW_COMMIT} --oneline --reverse
+
+# 查看详细信息（包括日期和作者）
+git log ${OLD_COMMIT}..${NEW_COMMIT} --pretty=format:"%h|%s|%an|%ad" --date=short
+
+# 查看版本标签
+git log ${OLD_COMMIT}..${NEW_COMMIT} --decorate --oneline | grep "tag:"
+
+# 查看文件变更统计
+git diff ${OLD_COMMIT}..${NEW_COMMIT} --stat
+```
+
+**更新 UPSTREAM_CHANGELOG.md：**
+- 在文件顶部添加新的同步记录
+- 记录版本范围、主要功能、bug修复
+- 标注对你项目的影响
+- 参考现有格式进行补充
+
+### Step 5: Rebase 开发分支
 
 ```bash
 # 切换到开发分支
@@ -111,7 +147,7 @@ error: could not apply xxx...
 4. 继续 rebase：`git rebase --continue`
 5. 如果需要放弃：`git rebase --abort`
 
-### Step 5: 验证 Rebase 结果
+### Step 6: 验证 Rebase 结果
 
 ```bash
 # 查看提交历史，确认你的提交在最上面
@@ -129,7 +165,28 @@ and have X and Y different commits each, respectively.
 
 这是正常的！因为 rebase 改写了提交历史。
 
-### Step 6: 推送到远程
+### Step 7: 提交更新日志（如果有修改）
+
+如果你在 Step 4 更新了 `UPSTREAM_CHANGELOG.md`，现在提交它：
+
+```bash
+# 查看修改
+git diff UPSTREAM_CHANGELOG.md
+
+# 添加文件
+git add UPSTREAM_CHANGELOG.md
+
+# 提交（使用合适的消息格式）
+git commit -m "docs: 更新上游同步日志 (vX.X.X → vY.Y.Y)
+
+记录 ${OLD_COMMIT:0:8}..${NEW_COMMIT:0:8} 的更新内容
+
+🤖 Generated with [Claude Code](https://claude.com/claude-code)
+
+Co-Authored-By: Claude <noreply@anthropic.com>"
+```
+
+### Step 8: 推送到远程
 
 ```bash
 # 使用 force-with-lease 安全地强制推送
@@ -141,7 +198,7 @@ git push origin qiyuan-api --force-with-lease
 - 如果远程有其他人的新提交，会拒绝推送
 - 如果确定要覆盖，使用 `--force`
 
-### Step 7: 最终验证
+### Step 9: 最终验证
 
 ```bash
 # 查看远程分支状态
@@ -163,38 +220,119 @@ nothing to commit, working tree clean
 ```bash
 #!/bin/bash
 
+# 颜色输出
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+RED='\033[0;31m'
+NC='\033[0m' # No Color
+
+echo -e "${GREEN}=== Fork 仓库同步脚本 ===${NC}"
+
 # 安全检查
 if [ -n "$(git status --porcelain)" ]; then
-  echo "错误：工作区有未提交的改动，请先处理"
+  echo -e "${RED}错误：工作区有未提交的改动，请先处理${NC}"
+  git status --short
   exit 1
+fi
+
+# 确认当前在 qiyuan-api 分支
+CURRENT_BRANCH=$(git branch --show-current)
+if [ "$CURRENT_BRANCH" != "qiyuan-api" ]; then
+  echo -e "${YELLOW}当前分支: $CURRENT_BRANCH，切换到 qiyuan-api${NC}"
+  git checkout qiyuan-api
 fi
 
 # 1. 拉取最新代码
-echo "=== 拉取所有远程更新 ==="
+echo -e "\n${GREEN}=== Step 1: 拉取所有远程更新 ===${NC}"
 git fetch --all
 
-# 2. 更新 main
-echo "=== 更新 main 分支 ==="
+# 2. 记录当前 main 的提交（用于后续生成更新日志）
+OLD_MAIN=$(git rev-parse main)
+echo -e "${YELLOW}当前 main: ${OLD_MAIN:0:8}${NC}"
+
+# 3. 更新 main
+echo -e "\n${GREEN}=== Step 2: 更新 main 分支 ===${NC}"
 git checkout main
 git pull origin main
 
-# 3. Rebase qiyuan-api
-echo "=== Rebase qiyuan-api 分支 ==="
+# 4. 记录更新后的 main
+NEW_MAIN=$(git rev-parse main)
+echo -e "${YELLOW}更新后 main: ${NEW_MAIN:0:8}${NC}"
+
+# 5. 显示更新概览
+if [ "$OLD_MAIN" != "$NEW_MAIN" ]; then
+  echo -e "\n${GREEN}=== 本次更新内容概览 ===${NC}"
+  COMMIT_COUNT=$(git rev-list --count ${OLD_MAIN}..${NEW_MAIN})
+  echo -e "${YELLOW}新增 $COMMIT_COUNT 个提交${NC}"
+
+  # 显示版本标签
+  echo -e "\n${GREEN}新增版本标签:${NC}"
+  git log ${OLD_MAIN}..${NEW_MAIN} --decorate --oneline | grep "tag:" || echo "无新标签"
+
+  # 显示最近 5 个提交
+  echo -e "\n${GREEN}最近 5 个提交:${NC}"
+  git log ${OLD_MAIN}..${NEW_MAIN} --oneline -5
+
+  # 提示更新日志
+  echo -e "\n${YELLOW}提示: 建议在 rebase 后更新 UPSTREAM_CHANGELOG.md${NC}"
+  echo -e "${YELLOW}使用以下命令查看详细更新:${NC}"
+  echo -e "  git log ${OLD_MAIN:0:8}..${NEW_MAIN:0:8} --oneline"
+else
+  echo -e "${YELLOW}main 分支无更新${NC}"
+fi
+
+# 6. Rebase qiyuan-api
+echo -e "\n${GREEN}=== Step 3: Rebase qiyuan-api 分支 ===${NC}"
 git checkout qiyuan-api
 git rebase main
 
-# 4. 检查是否有冲突
+# 7. 检查是否有冲突
 if [ $? -ne 0 ]; then
-  echo "错误：Rebase 遇到冲突，请手动解决"
+  echo -e "${RED}错误：Rebase 遇到冲突，请手动解决${NC}"
+  echo -e "${YELLOW}解决冲突后:${NC}"
+  echo -e "  git add <文件>"
+  echo -e "  git rebase --continue"
+  echo -e "${YELLOW}或放弃 rebase:${NC}"
+  echo -e "  git rebase --abort"
   exit 1
 fi
 
-# 5. 推送到远程
-echo "=== 推送到远程 ==="
-git push origin qiyuan-api --force-with-lease
+# 8. 显示 rebase 结果
+echo -e "\n${GREEN}=== Rebase 成功！===${NC}"
+git log --oneline --graph -10
 
-echo "=== 完成！==="
-git status
+# 9. 推送确认
+echo -e "\n${YELLOW}准备推送到远程...${NC}"
+read -p "确认推送? (y/N): " -n 1 -r
+echo
+if [[ $REPLY =~ ^[Yy]$ ]]; then
+  echo -e "${GREEN}=== 推送到远程 ===${NC}"
+  git push origin qiyuan-api --force-with-lease
+
+  if [ $? -eq 0 ]; then
+    echo -e "\n${GREEN}✅ 同步完成！${NC}"
+    git status
+  else
+    echo -e "\n${RED}推送失败，请检查错误信息${NC}"
+    exit 1
+  fi
+else
+  echo -e "${YELLOW}已取消推送${NC}"
+  echo -e "稍后手动推送: git push origin qiyuan-api --force-with-lease"
+fi
+
+# 10. 提醒更新日志
+if [ "$OLD_MAIN" != "$NEW_MAIN" ]; then
+  echo -e "\n${YELLOW}📝 别忘了更新 UPSTREAM_CHANGELOG.md！${NC}"
+  echo -e "记录范围: ${OLD_MAIN:0:8}..${NEW_MAIN:0:8}"
+fi
+```
+
+**使用方法：**
+```bash
+# 保存为 sync-fork.sh
+chmod +x sync-fork.sh
+./sync-fork.sh
 ```
 
 ## 常见问题
@@ -246,6 +384,45 @@ git clean -fd
 git checkout qiyuan-api
 ```
 
+### Q6: 如何快速生成更新日志？
+
+**A:** 使用以下命令提取关键信息：
+
+```bash
+# 记录本次同步的范围
+OLD_COMMIT="70f8a59a"  # 替换为实际的旧提交
+NEW_COMMIT="e07347ac"  # 替换为实际的新提交
+
+# 生成提交列表
+git log ${OLD_COMMIT}..${NEW_COMMIT} --oneline --reverse > commits.txt
+
+# 生成详细信息（带日期和作者）
+git log ${OLD_COMMIT}..${NEW_COMMIT} --pretty=format:"%h|%s|%an|%ad" --date=short > commits_detail.txt
+
+# 查看新增的版本标签
+git log ${OLD_COMMIT}..${NEW_COMMIT} --decorate --oneline | grep "tag:"
+
+# 查看文件变更统计
+git diff ${OLD_COMMIT}..${NEW_COMMIT} --stat
+
+# 查看某个具体功能的提交
+git log ${OLD_COMMIT}..${NEW_COMMIT} --oneline --grep="keyword"
+```
+
+然后参考 `UPSTREAM_CHANGELOG.md` 的格式，整理成易读的更新日志。
+
+### Q7: 多久需要同步一次上游？
+
+**A:** 建议：
+- **日常开发**: 每 1-2 周同步一次
+- **有重要修复**: 立即同步
+- **长期未开发**: 开始开发前先同步
+
+定期同步的好处：
+- 减少冲突的复杂度
+- 及时获得 bug 修复
+- 保持与上游功能一致
+
 ## 注意事项
 
 1. **永远不要在 main 分支上开发**，main 只用于同步上游
@@ -253,8 +430,12 @@ git checkout qiyuan-api
 3. **force push 前三思**，确认是你自己的分支
 4. **定期同步**，避免落后太多导致冲突复杂化
 5. **重要改动前先备份**，创建临时分支：`git branch backup-qiyuan-api`
+6. **记录每次同步**，更新 UPSTREAM_CHANGELOG.md，方便以后查阅
+7. **提交信息规范**，使用 conventional commits 格式（feat, fix, docs 等）
 
 ## 快速参考
+
+### Git 命令
 
 | 命令 | 说明 |
 |------|------|
@@ -266,6 +447,32 @@ git checkout qiyuan-api
 | `git rebase --continue` | 解决冲突后继续 |
 | `git reflog` | 查看操作历史（用于回滚） |
 
-## 最后更新
+### 分析命令
 
-- 2025-11-16: 初始版本，记录完整 rebase 流程
+| 命令 | 说明 |
+|------|------|
+| `git log A..B --oneline` | 查看 B 领先 A 的提交 |
+| `git log A..B --stat` | 查看文件变更统计 |
+| `git log --decorate --oneline \| grep "tag:"` | 查看版本标签 |
+| `git diff A..B --stat` | 查看两个提交间的差异统计 |
+
+### 快捷流程
+
+```bash
+# 完整同步流程（一行版）
+git fetch --all && git checkout main && git pull && git checkout qiyuan-api && git rebase main && git push origin qiyuan-api --force-with-lease
+
+# 检查上游是否有更新
+git fetch --all && git log main..upstream/main --oneline
+
+# 查看 qiyuan-api 的自定义提交
+git log main..qiyuan-api --oneline
+
+# 创建备份分支
+git branch backup-$(date +%Y%m%d)
+```
+
+## 更新历史
+
+- **2025-11-16**: 初始版本，记录完整 rebase 流程
+- **2025-11-16**: 添加更新日志记录步骤、完善脚本、增加常见问题 Q6-Q7
