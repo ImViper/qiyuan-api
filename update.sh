@@ -164,14 +164,14 @@ pull_code() {
 check_config_updates() {
     log_info "检查配置文件更新..."
 
-    if git diff HEAD~1 .env.example | grep -q "^+"; then
-        log_warning "检测到 .env.example 有更新"
-        log_warning "请检查并更新你的 .env 文件"
-        log_info "使用: diff .env.example .env"
+    if git diff HEAD~1 docker-compose.yml | grep -q "environment:" || git diff HEAD~1 docker-compose.yml | grep -q "^+.*-.*:"; then
+        log_warning "检测到 docker-compose.yml 配置部分有更新"
+        log_warning "请检查是否有新的环境变量需要配置"
+        log_info "查看差异: git diff HEAD~1 docker-compose.yml"
         read -p "是否查看差异? (y/N): " -n 1 -r
         echo
         if [[ $REPLY =~ ^[Yy]$ ]]; then
-            diff .env.example .env || true
+            git diff HEAD~1 docker-compose.yml | grep -A 20 "environment:"
         fi
     fi
 }
