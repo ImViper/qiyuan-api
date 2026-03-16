@@ -108,23 +108,33 @@ func SubscriptionRequestEpay(c *gin.Context) {
 		common.ApiErrorMsg(c, "拉起支付失败")
 		return
 	}
-	common.ApiSuccess(c, gin.H{"data": params, "url": uri})
+	c.JSON(http.StatusOK, gin.H{"message": "success", "data": params, "url": uri})
 }
 
 func SubscriptionEpayNotify(c *gin.Context) {
-	if err := c.Request.ParseForm(); err != nil {
-		_, _ = c.Writer.Write([]byte("fail"))
-		return
-	}
-	params := lo.Reduce(lo.Keys(c.Request.PostForm), func(r map[string]string, t string, i int) map[string]string {
-		r[t] = c.Request.PostForm.Get(t)
-		return r
-	}, map[string]string{})
-	if len(params) == 0 {
+	var params map[string]string
+
+	if c.Request.Method == "POST" {
+		// POST 请求：从 POST body 解析参数
+		if err := c.Request.ParseForm(); err != nil {
+			_, _ = c.Writer.Write([]byte("fail"))
+			return
+		}
+		params = lo.Reduce(lo.Keys(c.Request.PostForm), func(r map[string]string, t string, i int) map[string]string {
+			r[t] = c.Request.PostForm.Get(t)
+			return r
+		}, map[string]string{})
+	} else {
+		// GET 请求：从 URL Query 解析参数
 		params = lo.Reduce(lo.Keys(c.Request.URL.Query()), func(r map[string]string, t string, i int) map[string]string {
 			r[t] = c.Request.URL.Query().Get(t)
 			return r
 		}, map[string]string{})
+	}
+
+	if len(params) == 0 {
+		_, _ = c.Writer.Write([]byte("fail"))
+		return
 	}
 
 	client := GetEpayClient()
@@ -157,40 +167,50 @@ func SubscriptionEpayNotify(c *gin.Context) {
 // SubscriptionEpayReturn handles browser return after payment.
 // It verifies the payload and completes the order, then redirects to console.
 func SubscriptionEpayReturn(c *gin.Context) {
-	if err := c.Request.ParseForm(); err != nil {
-		c.Redirect(http.StatusFound, system_setting.ServerAddress+"/console/subscription?pay=fail")
-		return
-	}
-	params := lo.Reduce(lo.Keys(c.Request.PostForm), func(r map[string]string, t string, i int) map[string]string {
-		r[t] = c.Request.PostForm.Get(t)
-		return r
-	}, map[string]string{})
-	if len(params) == 0 {
+	var params map[string]string
+
+	if c.Request.Method == "POST" {
+		// POST 请求：从 POST body 解析参数
+		if err := c.Request.ParseForm(); err != nil {
+			c.Redirect(http.StatusFound, system_setting.ServerAddress+"/console/topup?pay=fail")
+			return
+		}
+		params = lo.Reduce(lo.Keys(c.Request.PostForm), func(r map[string]string, t string, i int) map[string]string {
+			r[t] = c.Request.PostForm.Get(t)
+			return r
+		}, map[string]string{})
+	} else {
+		// GET 请求：从 URL Query 解析参数
 		params = lo.Reduce(lo.Keys(c.Request.URL.Query()), func(r map[string]string, t string, i int) map[string]string {
 			r[t] = c.Request.URL.Query().Get(t)
 			return r
 		}, map[string]string{})
 	}
 
+	if len(params) == 0 {
+		c.Redirect(http.StatusFound, system_setting.ServerAddress+"/console/topup?pay=fail")
+		return
+	}
+
 	client := GetEpayClient()
 	if client == nil {
-		c.Redirect(http.StatusFound, system_setting.ServerAddress+"/console/subscription?pay=fail")
+		c.Redirect(http.StatusFound, system_setting.ServerAddress+"/console/topup?pay=fail")
 		return
 	}
 	verifyInfo, err := client.Verify(params)
 	if err != nil || !verifyInfo.VerifyStatus {
-		c.Redirect(http.StatusFound, system_setting.ServerAddress+"/console/subscription?pay=fail")
+		c.Redirect(http.StatusFound, system_setting.ServerAddress+"/console/topup?pay=fail")
 		return
 	}
 	if verifyInfo.TradeStatus == epay.StatusTradeSuccess {
 		LockOrder(verifyInfo.ServiceTradeNo)
 		defer UnlockOrder(verifyInfo.ServiceTradeNo)
 		if err := model.CompleteSubscriptionOrder(verifyInfo.ServiceTradeNo, common.GetJsonString(verifyInfo)); err != nil {
-			c.Redirect(http.StatusFound, system_setting.ServerAddress+"/console/subscription?pay=fail")
+			c.Redirect(http.StatusFound, system_setting.ServerAddress+"/console/topup?pay=fail")
 			return
 		}
-		c.Redirect(http.StatusFound, system_setting.ServerAddress+"/console/subscription?pay=success")
+		c.Redirect(http.StatusFound, system_setting.ServerAddress+"/console/topup?pay=success")
 		return
 	}
-	c.Redirect(http.StatusFound, system_setting.ServerAddress+"/console/subscription?pay=pending")
+	c.Redirect(http.StatusFound, system_setting.ServerAddress+"/console/topup?pay=pending")
 }
